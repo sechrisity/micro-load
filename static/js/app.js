@@ -413,19 +413,20 @@
     const wi = workIndex(it.sets);
     const plateAt = it.sets.findIndex((x) => !x.done);
     const exNote = it.note || openNote["ex:" + it.uid];
+    const lastTxt = last
+      ? `Last · ${fmtDate(last.s.date)}: ` + last.it.sets.map((x) => `<b>${fig(x.w, x.r)}</b>${x.rir != null ? " @" + x.rir : ""}${x.q != null ? " (" + x.q + "/10)" : ""}`).join(" · ")
+      : "First time logging this exercise. Today sets your baseline";
     return `<li class="card" data-uid="${it.uid}">
       <div class="card-h"><span class="handle" title="Drag to reorder" aria-hidden="true">${ic("grip")}</span><div class="ttl"><div class="nm">${esc(ex.name)}</div><div class="meta">${esc(rangeText(ex))} · ${esc(label(RL.EQUIPMENT, ex.equip).replace(/ \(.*\)/, ""))}</div></div><button class="iconbtn" data-act="rmitem" data-i="${i}" aria-label="Remove ${esc(ex.name)}">${ic("x")}</button></div>
       ${ex.cues ? `<details class="cues"><summary>Cues</summary>${esc(ex.cues)}</details>` : ""}
-      <div class="lastline">${last ? "Last time " + fmtDate(last.s.date) : "First time. Today sets your baseline"}</div>
-      <div class="setgrid sethead" aria-hidden="true"><span>Set</span><span>Previous</span><span>${esc(RL.wUnit(ex, c0))}</span><span>${RL.rUnit(ex)}</span><span></span></div>
+      <div class="lastline">${lastTxt}</div>
       <div class="sets">${it.sets.map((c, si) => setHTML(it, ex, c, si, wi[si], last && wi[si] >= 0 ? last.it.sets[wi[si]] : null, i, prior, c0, adviceFor(it, si, ex, c0))).join("")}</div>
       <div class="card-f"><button class="btn sm" data-act="addset" data-i="${i}">${ic("plus", "sm")}Add set</button>${it.sets.length > 1 ? `<button class="iconbtn" data-act="rmset" data-i="${i}" aria-label="Remove last set">${ic("minus")}</button>` : ""}<span class="grow"></span>
         ${ex.equip === "barbell" && ex.measure === "total" ? `<button class="txtbtn muted" data-act="plates" data-i="${i}" data-s="${plateAt < 0 ? it.sets.length - 1 : plateAt}">Plates</button>` : ""}
-        ${exNote ? "" : `<button class="txtbtn muted" data-act="noteopen" data-k="ex:${it.uid}" data-i="${i}">Note</button>`}
+        ${exNote ? "" : `<button class="txtbtn muted" data-act="noteopen" data-k="ex:${it.uid}" data-i="${i}">Exercise note</button>`}
         ${exNote ? `<textarea data-f="note" data-i="${i}" rows="1" placeholder="Setup, cues, how it felt" aria-label="Exercise note">${esc(it.note)}</textarea>` : ""}</div>
     </li>`;
   }
-
   // Advice for set si from the most recent logged working set before it in the same exercise.
   function adviceFor(it, si, ex, c0) {
     const c = it.sets[si];
@@ -445,42 +446,44 @@
     const cw = c.w ?? (RL.LOAD_MEASURES.has(ex.measure) ? null : 0);
     const hit = t && c.done && cw != null && c.r != null && cw >= t.w && c.r >= t.r;
     const d = `data-i="${i}" data-s="${si}"`;
-    let tg = "";
+    let target = "";
     if (p && !c.warm) {
-      tg = pg && pg.type === "custom" ? `<span class="tg">${esc(pg.text || "Custom")}</span>`
-        : t ? `<span class="tg ${hit ? "hit" : ""}">${hit ? "Hit " : ""}${esc(RL.goalLabel(pg || { type: "hold" }, ex, c0))}</span>` : "";
+      target = pg && pg.type === "custom" ? `<span class="target">Goal: <b>${esc(pg.text || "Custom")}</b></span>`
+        : t ? `<span class="target ${hit ? "hit" : ""}">${hit ? "Goal hit" : "Goal: " + esc(RL.goalLabel(pg || { type: "hold" }, ex, c0))} → <b class="fig">${fig(t.w, t.r)}</b></span>` : "";
     }
     const isCardio = ex.measure === "cardio", showRir = !isCardio && ex.measure !== "time";
-    let detail = "";
+    const scale = (act, vals, cur) => vals.map((n) => `<button class="${cur === n ? "on" : act === "q" && cur && n < cur ? "lit" : ""}" data-act="${act}" ${d} data-v="${n}" aria-label="${act === "q" ? "Quality" : "RIR"} ${n}" aria-pressed="${cur === n}">${n}</button>`).join("");
+    const BD = [["form", "Form"], ["exec", "Execution"], ["pause", "Pauses and tempo"], ["breath", "Breathing"], ["rom", "Range of motion"]];
+    let result = "";
     if (c.done && !c.warm) {
       const pr = RL.progression(c, p, ex, c0), g = c.goal, isPr = RL.isPR(c, prior, ex);
-      const BD = [["form", "Form"], ["exec", "Execution"], ["pause", "Pauses and tempo"], ["breath", "Breathing"], ["rom", "Range of motion"]];
-      const scale = (act, vals, cur) => vals.map((n) => `<button class="${cur === n ? "on" : act === "q" && cur && n < cur ? "lit" : ""}" data-act="${act}" ${d} data-v="${n}" aria-label="${act === "q" ? "Quality" : "RIR"} ${n}" aria-pressed="${cur === n}">${n}</button>`).join("");
-      detail = `<div class="detail">
-        ${showRir ? `<div class="rate"><span class="lbl">RIR</span><div class="scale rir">${scale("rir", [0, 1, 2, 3, 4, 5], c.rir)}</div></div>` : ""}
-        <div class="rate"><span class="lbl">Quality</span><div class="scale">${scale("q", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], c.q)}</div></div>
-        ${openBd[k] ? `<div class="bd">${BD.map(([key, lab]) => { const v = (c.bd && c.bd[key]) ?? c.q ?? 7; return `<label><span>${lab}<b id="bdv-${k}-${key}">${v}</b></span><input type="range" min="1" max="10" step="1" value="${v}" data-f="bd.${key}" ${d}></label>`; }).join("")}</div>` : ""}
+      result = `<div class="result">
         ${pr || isPr ? `<div class="resline">${pr ? `<span class="badge ${pr.kind}">${esc(pr.text)}${p ? " vs last" : ""}</span>` : ""}${isPr ? `<span class="badge pr">${ic("trophy", "sm")}New PR</span>` : ""}</div>` : ""}
-        <div class="nextgoal"><span class="muted">Next time</span><button class="pick" data-act="goalopen" data-k="${k}" data-i="${i}" aria-expanded="${!!openGoal[k]}">${esc(RL.goalLabel(g, ex, c0))}${ic("chevdown", "sm")}</button></div>
-        ${openGoal[k] ? `<div class="goalchips">${RL.goalTypes(ex, c0).map(([ty, l]) => `<button class="chip ${g && g.type === ty ? "on" : ""}" data-act="goal" ${d} data-v="${ty}">${esc(l)}</button>`).join("")}
+        <div class="nextgoal"><span class="lbl">Next session</span></div>
+        <div class="goalchips">${RL.goalTypes(ex, c0).map(([ty, l]) => `<button class="chip ${g && g.type === ty ? "on" : ""}" data-act="goal" ${d} data-v="${ty}">${esc(l)}</button>`).join("")}
           ${g && g.type === "add" ? `<input type="number" step="any" inputmode="decimal" value="${g.v ?? ""}" placeholder="${esc(RL.wUnit(ex, c0))}" data-f="goalv" ${d} aria-label="Load to add">` : ""}
-          ${g && g.type === "custom" ? `<input class="wide" type="text" value="${esc(g.text || "")}" placeholder="3 s lowering" data-f="goaltext" ${d} aria-label="Custom goal">` : ""}</div>` : ""}
-        ${c.goalAuto !== false && c.why ? `<div class="why">${esc(c.why)}</div>` : c.goalAuto === false ? `<div class="why">Your call. <button class="txtbtn" data-act="goalauto" ${d}>Use suggestion</button></div>` : ""}
-        ${p && p.note ? `<div class="lastnote"><b>Last time</b>${esc(p.note)}</div>` : ""}
-        ${c.note || openNote[k] ? `<input class="setnote" type="text" value="${esc(c.note || "")}" placeholder="Cue, pain, setup, what to fix" data-f="snote" ${d} aria-label="Note for this set">` : ""}
-        <div class="links">${c.note || openNote[k] ? "" : `<button data-act="noteopen" data-k="${k}" data-i="${i}">Add note</button>`}<button data-act="bd" data-k="${k}">${openBd[k] ? "Hide breakdown" : "Rate form, tempo, breathing"}</button></div>
+          ${g && g.type === "custom" ? `<input class="wide" type="text" value="${esc(g.text || "")}" placeholder="3 s lowering" data-f="goaltext" ${d} aria-label="Custom goal">` : ""}</div>
+        ${c.goalAuto !== false && c.why ? `<div class="why"><b>Suggested:</b> ${esc(c.why)}</div>` : c.goalAuto === false ? `<div class="why">Your call. <button class="txtbtn" data-act="goalauto" ${d}>Use suggestion</button></div>` : ""}
       </div>`;
     }
     return `<div class="set ${c.done ? "done" : ""} ${c.warm ? "warm" : ""}">
-      <div class="setgrid">
-        <button class="setno ${c.warm ? "warm" : ""}" data-act="warm" ${d} aria-label="${c.warm ? "Warm-up set, tap to make it a working set" : "Set " + (w + 1) + ", tap to mark as warm-up"}">${c.warm ? "W" : w + 1}</button>
-        <div class="prev">${p && !c.warm ? fig(p.w, p.r) : "-"}${tg}</div>
-        <input class="cell" type="number" step="any" inputmode="decimal" value="${c.w ?? ""}" placeholder="${t ? fw(t.w) : ""}" data-f="w" ${d} aria-label="${isCardio ? "Distance" : "Load"} in ${esc(RL.wUnit(ex, c0))}">
-        <input class="cell" type="number" step="${isCardio ? "any" : ex.measure === "time" ? "1" : "0.5"}" inputmode="decimal" value="${c.r ?? ""}" placeholder="${t ? t.r : ""}" data-f="r" ${d} aria-label="${esc(RL.rUnit(ex))}">
-        <button class="chk" data-act="done" ${d} aria-pressed="${!!c.done}" aria-label="${c.done ? "Logged, tap to undo" : "Log set"}">${ic("check")}</button>
+      <div class="set-top">
+        <button class="setno ${c.warm ? "warm" : ""}" data-act="warm" ${d} aria-label="${c.warm ? "Warm-up set, tap to make it a working set" : "Set " + (w + 1) + ", tap to mark as warm-up"}">${c.warm ? "Warm-up" : "Set " + (w + 1)}</button>${target}
+        <button class="logbtn" data-act="done" ${d} aria-pressed="${!!c.done}">${c.done ? ic("check", "sm") + "Logged" : "Log set"}</button>
       </div>
       ${adv ? `<div class="advice ${adv.action}"><span>${esc(adv.text)}</span>${adv.w != null && adv.w !== c.w ? `<button class="btn sm" data-act="applyadv" ${d} data-v="${adv.w}">Use ${fw(adv.w)}</button>` : ""}</div>` : ""}
-      ${detail}</div>`;
+      <div class="inputs">
+        <label class="num"><input class="cell" type="number" step="any" inputmode="decimal" value="${c.w ?? ""}" placeholder="${t ? fw(t.w) : "0"}" data-f="w" ${d} aria-label="${isCardio ? "Distance" : "Load"}"><span>${esc(RL.wUnit(ex, c0))}</span></label>
+        <span class="x">×</span>
+        <label class="num"><input class="cell" type="number" step="${isCardio ? "any" : ex.measure === "time" ? "1" : "0.5"}" inputmode="decimal" value="${c.r ?? ""}" placeholder="${t ? t.r : "0"}" data-f="r" ${d} aria-label="${esc(RL.rUnit(ex))}"><span>${RL.rUnit(ex)}</span></label>
+      </div>
+      ${c.warm ? "" : `${showRir ? `<div class="rate"><span class="lbl">RIR</span><div class="scale rir">${scale("rir", [0, 1, 2, 3, 4, 5], c.rir)}</div></div>` : ""}
+      <div class="rate"><span class="lbl">Quality</span><div class="scale">${scale("q", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], c.q)}</div></div>
+      ${openBd[k] ? `<div class="bd">${BD.map(([key, lab]) => { const v = (c.bd && c.bd[key]) ?? c.q ?? 7; return `<label><span>${lab}<b id="bdv-${k}-${key}">${v}</b></span><input type="range" min="1" max="10" step="1" value="${v}" data-f="bd.${key}" ${d}></label>`; }).join("")}</div>` : ""}
+      <div class="links"><button data-act="bd" data-k="${k}">${openBd[k] ? "Hide breakdown" : "Rate form, tempo, breathing"}</button></div>`}
+      ${p && p.note ? `<div class="lastnote"><b>Last time</b>${esc(p.note)}</div>` : ""}
+      <input class="setnote" type="text" value="${esc(c.note || "")}" placeholder="Set note: cue, pain, setup, what to fix" data-f="snote" ${d} aria-label="Note for this set">
+      ${result}</div>`;
   }
   // Re-render one card, keeping focus on the same field so typing isn't interrupted.
   function rerenderCard(i) {
