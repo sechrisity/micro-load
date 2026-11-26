@@ -8,3 +8,4 @@ Ideas under consideration. Nothing here is built or promised.
 | Next-set suggestions within a session | Built (0.1.0) | No | RIR-based autoregulation after each logged set |
 | Breakdown rep marker | Proposed | No | Mark the rep where form started to slip. Manual version of the video signal and future calibration labels |
 | [Video form and velocity analysis](video-form-analysis.md) | Research | Small validation set only | On-device pose estimation, form breakdown first rep vs later reps |
+| [Compare with friends](social-comparison.md) | Backlog | No | Opt-in comparison of consistency, goals and progress rate, starting with a share card |

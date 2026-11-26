@@ -489,3 +489,26 @@ table.h th { color: var(--muted); font-weight: 600; font-size: 12px; }
   .tabbar button svg.i { padding: 0; }
   .tabbar button[aria-selected="true"] svg.i { background: none; }
 }
+
+/* calendar */
+.cal { background: var(--surface); border-radius: var(--r); padding: 8px 8px 12px; box-shadow: 0 0 0 .5px var(--line); }
+.cal-h { display: flex; align-items: center; gap: 8px; padding: 0 0 8px; }
+.cal-t { flex: 1; text-align: center; }
+.cal-t b { display: block; font-weight: 600; }
+.cal-t span { font-size: 13px; color: var(--muted); }
+.cal-g { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
+.cal-w { font-size: 12px; color: var(--faint); font-weight: 500; padding-bottom: 4px; }
+.day { position: relative; height: 40px; width: 40px; margin: 0 auto; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; font-size: 15px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.day.has { background: var(--accent-fill); color: #FFFFFF; font-weight: 600; }
+.day.today { box-shadow: inset 0 0 0 2px var(--accent); color: var(--accent); font-weight: 600; }
+.day.has.today { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); color: #FFFFFF; }
+.day i { position: absolute; bottom: 4px; width: 4px; height: 4px; border-radius: 4px; background: #FFFFFF; }
+/* goals */
+.goalseg { margin: 4px 0 0; }
+.row.goal .body progress { display: block; margin-top: 8px; height: 6px; }
+.row.goal { align-items: flex-start; }
+.row.goal .end { padding-top: 2px; }
+.goalbar { display: flex; align-items: center; gap: 12px; margin: 4px 0 12px; }
+.goalbar progress { flex: 1; height: 10px; }
+.goalbar b { font-family: var(--mono); font-weight: 500; }
+@media (max-width: 380px) { .day { width: 36px; height: 36px; } }

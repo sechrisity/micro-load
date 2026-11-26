@@ -36,7 +36,8 @@ Rep Ledger runs as a single small container or as plain static files. It install
 | Adaptive suggestions | Tracks which goals you actually hit on each exercise and switches between microloads and extra reps when one keeps missing |
 | Next-set advice | After a logged set, the next set suggests more load, the same load or less, based on your RIR against a target you set |
 | Tools | Rest timer with vibration, barbell plate calculator, personal record detection |
-| History | Session cards, a logbook view per session, weekly and monthly counts, week streak, and working sets per muscle group over the last 7 days |
+| History | Month calendar with training days marked (tap a day to open it), a logbook view per session, weekly and monthly counts, week streak, and working sets per muscle group over the last 7 days |
+| Goals | Monthly, quarterly and yearly goals: number of workouts, working sets, total volume, a load and reps to hit on a lift, or anything else you tick off yourself. Progress, days left and an on-pace check, with optional repeat every period |
 | Progress | Per-exercise chart of estimated 1RM (or best reps, time or distance) with average quality, plus a session table |
 | Data | Export a full JSON backup, export every set as CSV, import a backup, delete everything |
 | Offline | Installable PWA. Logs save on the device first and sync to the server when it is reachable |

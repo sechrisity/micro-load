@@ -40,6 +40,7 @@
   let view = "train", selEx = null, exQuery = "", openBd = {}, loaded = false, serverMode = false;
   let draft = null, step = 0, pickAt = null, pickRegion = "all";
   let exOpen = false, openGoal = {}, openNote = {}, syncText = "";
+  let goalFilter = "all", goalDraft = null, calMonth = null;
   let prefs = { rack: "all", mine: true };
   try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS) || "{}")); } catch (e) { /* defaults */ }
   const savePrefs = () => { try { localStorage.setItem(PREFS, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
@@ -347,7 +348,7 @@
   function render() {
     const onboarding = !S.consent || S.consent.version !== CONSENT_VERSION || !S.profile || view === "onboard";
     $("#tabs").hidden = onboarding;
-    ["onboard", "train", "history", "exercises", "settings"].forEach((v) => { $("#v-" + v).hidden = onboarding ? v !== "onboard" : v !== view; });
+    ["onboard", "train", "history", "goals", "exercises", "settings"].forEach((v) => { $("#v-" + v).hidden = onboarding ? v !== "onboard" : v !== view; });
     if (onboarding) {
       if (!S.consent || S.consent.version !== CONSENT_VERSION) return renderGate();
       if (!draft) { startSurvey(); return; }
@@ -358,6 +359,7 @@
     $("#groups").innerHTML = RL.GROUPS.map((g) => `<option value="${esc(g)}">`).join("");
     if (view === "train") renderTrain();
     else if (view === "history") renderHistory();
+    else if (view === "goals") renderGoals();
     else if (view === "exercises") renderExercises();
     else renderSettings();
   }
@@ -580,7 +582,8 @@
     in7.forEach((s) => s.items.forEach((it) => { const g = exById(it.exId).group || "Other"; vol[g] = (vol[g] || 0) + workingDone(it.sets).length; }));
     const vmax = Math.max(10, ...Object.values(vol));
     $("#v-history").innerHTML = navHTML("History", list.length ? plural(list.length, "workout") + " logged" : "")
-      + `<div class="tiles"><div class="tile"><b>${in7.length}</b><span>Last 7 days</span></div><div class="tile"><b>${in30.length}</b><span>Last 30 days</span></div><div class="tile"><b>${streak}</b><span>Week streak</span></div><div class="tile"><b>${list.length}</b><span>All time</span></div></div>`
+      + calendarHTML(list)
+      + `<div class="sec"></div><div class="tiles"><div class="tile"><b>${in7.length}</b><span>Last 7 days</span></div><div class="tile"><b>${in30.length}</b><span>Last 30 days</span></div><div class="tile"><b>${streak}</b><span>Week streak</span></div><div class="tile"><b>${list.length}</b><span>All time</span></div></div>`
       + (Object.keys(vol).length ? `<div class="sec">Working sets, last 7 days</div><div class="group bars">${Object.entries(vol).sort((a, b) => b[1] - a[1]).map(([g, n]) => `<div class="bar"><span>${esc(g)}</span><progress max="${vmax}" value="${n}" aria-label="${esc(g)}: ${n} sets">${n}</progress><b>${n}</b></div>`).join("")}</div>` : "")
       + `<div class="sec">Workouts</div>` + (list.length ? `<div class="group">${list.map((s) => {
         const st = sessionStats(s);
@@ -608,6 +611,118 @@
       ${logbookHTML(ss)}
       ${justFinished ? `<div class="ctabar"><button class="btn primary" data-act="close">Done</button></div>`
         : `<div class="ctabar"><button class="btn" data-act="repeat" data-id="${esc(ss.id)}">Repeat</button><button class="btn" data-act="saveroutine" data-id="${esc(ss.id)}">Save as routine</button><button class="btn danger back" data-act="del" data-id="${esc(ss.id)}" aria-label="Delete workout">${ic("trash")}</button></div>`}`, false, true);
+  }
+
+  /* ---------- calendar ---------- */
+  function calendarHTML(list) {
+    const now = new Date();
+    if (calMonth == null) calMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const m = new Date(calMonth), y = m.getFullYear(), mo = m.getMonth();
+    const byDay = {};
+    list.forEach((s) => { (byDay[s.date] = byDay[s.date] || []).push(s); });
+    const cells = RL.monthCells(y, mo), tdy = today();
+    const inMonth = cells.filter((c) => c && byDay[c]).length;
+    return `<div class="cal">
+      <div class="cal-h"><button class="iconbtn" data-act="calprev" aria-label="Previous month">${ic("chevleft")}</button>
+        <div class="cal-t"><b>${m.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</b><span>${plural(inMonth, "training day")}</span></div>
+        <button class="iconbtn" data-act="calnext" aria-label="Next month">${ic("chev")}</button></div>
+      <div class="cal-g" role="grid">${["M", "T", "W", "T", "F", "S", "S"].map((d) => `<span class="cal-w" aria-hidden="true">${d}</span>`).join("")}
+        ${cells.map((c) => {
+          if (!c) return `<span></span>`;
+          const n = (byDay[c] || []).length, dnum = +c.slice(8);
+          return n ? `<button class="day has ${c === tdy ? "today" : ""}" data-act="calday" data-date="${c}" aria-label="${fmtDate(c)}, ${plural(n, "workout")}">${dnum}${n > 1 ? `<i aria-hidden="true"></i>` : ""}</button>`
+            : `<span class="day ${c === tdy ? "today" : ""}">${dnum}</span>`;
+        }).join("")}</div></div>`;
+  }
+  function openDay(date) {
+    const day = doneSessions().filter((s) => s.date === date);
+    if (day.length === 1) return openSession(day[0].id);
+    modal(`<div class="mh"><h2>${fmtDate(date)}</h2><button class="iconbtn" data-act="close" aria-label="Close">${ic("x")}</button></div>
+      <div class="group">${day.map((s) => rowBtn("view", `data-id="${esc(s.id)}"`, esc(s.label || "Workout"), plural(s.items.length, "exercise"), "")).join("")}</div>`);
+  }
+
+  /* ---------- goals ---------- */
+  const GOAL_KINDS = [["workouts", "Number of workouts"], ["sets", "Working sets"], ["volume", "Total volume"], ["lift", "Lift a weight"], ["custom", "Something else"]];
+  const PERIODS = [["month", "Month"], ["quarter", "Quarter"], ["year", "Year"]];
+  const GOAL_HINT = { workouts: { month: 12, quarter: 36, year: 150 }, sets: { month: 150, quarter: 450, year: 1800 }, volume: { month: 50000, quarter: 150000, year: 600000 } };
+  const num0 = (n) => Math.round(n).toLocaleString();
+  function goalTitle(g) {
+    const u = S.settings.unit;
+    switch (g.kind) {
+      case "workouts": return plural(+g.target, "workout");
+      case "sets": return plural(+g.target, "working set");
+      case "volume": return num0(+g.target) + " " + u + " total volume";
+      case "lift": return exById(g.exId).name + " " + fig(g.w, g.r);
+      default: return g.text || "Goal";
+    }
+  }
+  function goalDetail(g, pr) {
+    const u = S.settings.unit;
+    if (g.kind === "lift") return pr.best ? "Best " + fig(pr.best.w, pr.best.r) + " " + u : "Not logged yet this " + g.period;
+    if (g.kind === "custom") return pr.achieved ? "Done" : "Not done yet";
+    if (g.kind === "volume") return num0(pr.value) + " of " + num0(pr.target) + " " + u;
+    return pr.value + " of " + pr.target;
+  }
+  function goalStatus(pr) {
+    if (pr.achieved) return `<span class="badge up">${ic("check", "sm")}Done</span>`;
+    if (pr.ended) return `<span class="badge down">Missed</span>`;
+    return pr.onPace ? `<span class="badge first">On pace</span>` : `<span class="badge hold">Behind</span>`;
+  }
+  function goalRow(g, pr) {
+    return `<button class="row goal" data-act="goalview" data-id="${esc(g.id)}"><span class="body">
+        <span class="t">${esc(goalTitle(g))}</span>
+        <span class="d">${esc(goalDetail(g, pr))}${pr.ended || pr.achieved ? "" : " · " + plural(pr.daysLeft, "day") + " left"}${g.recurring ? " · repeats" : ""}</span>
+        <progress max="100" value="${Math.round(pr.pct * 100)}" aria-label="${Math.round(pr.pct * 100)} percent">${Math.round(pr.pct * 100)}%</progress>
+      </span><span class="end">${goalStatus(pr)}</span></button>`;
+  }
+  function renderGoals() {
+    const now = Date.now();
+    const all = S.goals.map((g) => ({ g, pr: RL.goalProgress(g, S.sessions, exById, now) }));
+    const shown = all.filter(({ g }) => goalFilter === "all" || g.period === goalFilter);
+    const active = shown.filter(({ pr }) => !pr.ended), done = shown.filter(({ pr }) => pr.ended);
+    const sections = PERIODS.map(([k, l]) => {
+      const items = active.filter(({ g }) => g.period === k);
+      if (!items.length) return "";
+      const label = { month: "This month", quarter: "This quarter", year: "This year" }[k] + " · " + RL.periodName(k, now);
+      return `<div class="sec">${esc(label)}</div><div class="group">${items.map(({ g, pr }) => goalRow(g, pr)).join("")}</div>`;
+    }).join("");
+    $("#v-goals").innerHTML = navHTML("Goals", all.length ? plural(all.filter(({ pr }) => pr.achieved && !pr.ended).length, "goal") + " done this period" : "", `<button class="btn tint sm" data-act="goaladd">${ic("plus", "sm")}New</button>`)
+      + `<div class="seg wrap goalseg">${[["all", "All"]].concat(PERIODS).map(([k, l]) => `<button data-act="gfilter" data-v="${k}" aria-pressed="${goalFilter === k}">${l}</button>`).join("")}</div>`
+      + (sections || (S.goals.length ? `<p class="note">No goals for this period</p>` : `<div class="sec"></div><div class="empty-card"><b>Set your first goal</b>Monthly, quarterly or yearly: a number of workouts, sets or total volume, a weight to hit on a lift, or anything else you want to track<div class="sec"></div><button class="btn primary" data-act="goaladd">New goal</button></div>`))
+      + (done.length ? `<div class="sec">Finished</div><div class="group">${done.sort((a, b) => b.pr.end - a.pr.end).map(({ g, pr }) => goalRow(g, pr)).join("")}</div>` : "");
+  }
+  function goalFieldsHTML(kind, period) {
+    const unit = S.settings.unit;
+    if (kind === "lift") {
+      const opts = SORTED.filter((e) => RL.LOAD_MEASURES.has(e.measure) && e.measure !== "level").map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join("");
+      return `<label class="wide">Exercise<select class="field" id="g-ex">${opts}</select></label>
+        <label>Load (${unit})<input class="field" id="g-w" type="number" step="any" min="0" inputmode="decimal"></label>
+        <label>Reps<input class="field" id="g-r" type="number" step="1" min="1" inputmode="numeric" value="5"></label>`;
+    }
+    if (kind === "custom") return `<label class="wide">Goal<input class="field" id="g-text" maxlength="80" placeholder="Train on 3 days every week"></label>`;
+    const hint = GOAL_HINT[kind][period];
+    return `<label class="wide">Target${kind === "volume" ? " (" + unit + ")" : ""}<input class="field" id="g-target" type="number" min="1" step="1" inputmode="numeric" placeholder="${hint}"></label>`;
+  }
+  function openGoalSheet() {
+    const d = goalDraft;
+    modal(`<div class="mh"><h2>New goal</h2><button class="iconbtn" data-act="close" aria-label="Close">${ic("x")}</button></div>
+      <div class="seg wrap">${PERIODS.map(([k, l]) => `<button data-act="gper" data-v="${k}" aria-pressed="${d.period === k}">${l}</button>`).join("")}</div>
+      <p class="note">${esc(RL.periodName(d.period, Date.now()))}</p><div class="sec"></div>
+      <div class="form"><label class="wide">Type<select class="field" id="g-kind">${GOAL_KINDS.map(([k, l]) => `<option value="${k}" ${d.kind === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+        ${goalFieldsHTML(d.kind, d.period)}</div>
+      <div class="sec"></div><div class="choices"><label class="agree"><input type="checkbox" id="g-rec" ${d.recurring ? "checked" : ""}><span class="mark">${ic("check")}</span><span>Repeat every ${d.period}</span></label></div>
+      <div class="err" id="gErr" role="alert"></div>
+      <div class="ctabar"><button class="btn back" data-act="close">Cancel</button><button class="btn primary" data-act="goalcreate">Add goal</button></div>`, true);
+  }
+  function openGoalDetail(id) {
+    const g = S.goals.find((x) => x.id === id); if (!g) return;
+    const pr = RL.goalProgress(g, S.sessions, exById, Date.now());
+    modal(`<div class="mh"><h2>${esc(goalTitle(g))}</h2><button class="iconbtn" data-act="close" aria-label="Close">${ic("x")}</button></div>
+      <p>${esc(RL.periodName(g.period, pr.start))} · ${esc(goalDetail(g, pr))}${pr.ended ? "" : " · " + plural(pr.daysLeft, "day") + " left"}</p>
+      <div class="goalbar"><progress max="100" value="${Math.round(pr.pct * 100)}"></progress><b>${Math.round(pr.pct * 100)}%</b></div>
+      <div class="resline">${goalStatus(pr)}${g.recurring ? `<span class="badge">Repeats every ${g.period}</span>` : ""}</div>
+      <div class="ctabar">${g.kind === "custom" ? `<button class="btn primary" data-act="goaltoggle" data-id="${esc(g.id)}">${g.done ? "Mark not done" : "Mark done"}</button>` : `<button class="btn primary" data-act="close">Done</button>`}
+        <button class="btn danger back" data-act="goaldel" data-id="${esc(g.id)}" aria-label="Delete goal">${ic("trash")}</button></div>`, true);
   }
 
   /* ---------- exercises ---------- */
@@ -868,6 +983,31 @@
       case "del": confirmBox("Delete workout?", "This removes it from your history. Future goals will compare against the session before it.", "del-yes", "Delete", `data-id="${esc(b.dataset.id)}"`); break;
       case "del-yes": S.sessions = S.sessions.filter((x) => x.id !== b.dataset.id); queue(); closeModal(); render(); break;
       case "close": case "close-bg": closeModal(); break;
+      case "calprev": case "calnext": { const m = new Date(calMonth); m.setMonth(m.getMonth() + (a === "calprev" ? -1 : 1)); calMonth = m.getTime(); renderHistory(); break; }
+      case "calday": openDay(b.dataset.date); break;
+      case "gfilter": goalFilter = b.dataset.v; renderGoals(); break;
+      case "goaladd": goalDraft = { period: "month", kind: "workouts", recurring: true }; openGoalSheet(); break;
+      case "gper": goalDraft.period = b.dataset.v; goalDraft.kind = $("#g-kind").value; openGoalSheet(); break;
+      case "goalcreate": {
+        const d = goalDraft, kind = $("#g-kind").value, err = (t) => { $("#gErr").textContent = t; };
+        const g = { id: "g-" + uid(), kind, period: d.period, recurring: $("#g-rec").checked, start: Date.now(), created: new Date().toISOString() };
+        if (kind === "lift") {
+          g.exId = $("#g-ex").value; g.w = num($("#g-w").value); g.r = Math.round(num($("#g-r").value) || 0);
+          if (!g.w || !g.r) { err("Enter the load and reps to hit"); break; }
+        } else if (kind === "custom") {
+          g.text = $("#g-text").value.trim(); g.done = false;
+          if (!g.text) { err("Describe the goal"); break; }
+        } else {
+          g.target = Math.round(num($("#g-target").value) || 0);
+          if (!g.target) { err("Enter a target"); break; }
+        }
+        S.goals.push(g); queue(); closeModal(); view = "goals"; render(); toast("Goal added");
+        break;
+      }
+      case "goalview": openGoalDetail(b.dataset.id); break;
+      case "goaltoggle": { const g = S.goals.find((x) => x.id === b.dataset.id); if (g) { g.done = !g.done; queue(); openGoalDetail(g.id); renderGoals(); } break; }
+      case "goaldel": confirmBox("Delete goal?", "Your logged workouts are not affected.", "goaldel-yes", "Delete", `data-id="${esc(b.dataset.id)}"`); break;
+      case "goaldel-yes": S.goals = S.goals.filter((g) => g.id !== b.dataset.id); queue(); closeModal(); renderGoals(); break;
       case "selex": selEx = b.dataset.id; exOpen = true; render(); if (!wide()) window.scrollTo(0, 0); break;
       case "exback": exOpen = false; render(); break;
       case "saveex": {
@@ -954,6 +1094,10 @@
       return;
     }
     if (el.id === "pl-bar") { drawPlates(); return; }
+    if (el.id === "g-kind" && goalDraft) {
+      goalDraft.kind = el.value; goalDraft.recurring = el.value !== "lift" && el.value !== "custom";
+      openGoalSheet(); return;
+    }
     const f = el.dataset.f;
     if (!f || f === "note" || f === "snote" || f === "goaltext" || f === "goalv") return;
     const s = active(); if (!s) return;

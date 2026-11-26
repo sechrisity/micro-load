@@ -322,6 +322,69 @@
     return { ok: left < 1e-9, perSide: out, remainder: round2(left) };
   }
 
+  // Calendar periods for goals. Returns [start, end) as local-time timestamps.
+  function periodRange(period, ts) {
+    const d = new Date(ts);
+    const y = d.getFullYear(), m = d.getMonth();
+    if (period === "year") return [new Date(y, 0, 1).getTime(), new Date(y + 1, 0, 1).getTime()];
+    if (period === "quarter") { const q = Math.floor(m / 3) * 3; return [new Date(y, q, 1).getTime(), new Date(y, q + 3, 1).getTime()]; }
+    return [new Date(y, m, 1).getTime(), new Date(y, m + 1, 1).getTime()];
+  }
+  function periodName(period, ts) {
+    const d = new Date(ts);
+    if (period === "year") return String(d.getFullYear());
+    if (period === "quarter") return "Q" + (Math.floor(d.getMonth() / 3) + 1) + " " + d.getFullYear();
+    return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  }
+
+  // Load moved in one working set, for volume goals. Per-side and per-dumbbell loads count twice.
+  function setVolume(ex, s) {
+    if (!s.w || !s.r) return 0;
+    if (ex.measure === "total") return s.w * s.r;
+    if (ex.measure === "side" || ex.measure === "each") return 2 * s.w * s.r;
+    return 0;
+  }
+
+  // Progress on one goal. Recurring goals track the period containing `now`; one-off goals their own period.
+  function goalProgress(goal, sessions, lookup, now) {
+    const [start, end] = periodRange(goal.period, goal.recurring ? now : goal.start);
+    const inRange = sessions.filter((s) => s.status === "done" && s.ts >= start && s.ts < end);
+    const work = (it) => it.sets.filter((x) => x.done && !x.warm);
+    let value = 0, target = Number(goal.target) || 0, best = null;
+    if (goal.kind === "workouts") value = inRange.length;
+    else if (goal.kind === "sets") value = inRange.reduce((a, s) => a + s.items.reduce((b, it) => b + work(it).length, 0), 0);
+    else if (goal.kind === "volume") value = Math.round(inRange.reduce((a, s) => a + s.items.reduce((b, it) => b + work(it).reduce((c, x) => c + setVolume(lookup(it.exId), x), 0), 0), 0));
+    else if (goal.kind === "lift") {
+      target = e1rm(goal.w, goal.r);
+      inRange.forEach((s) => s.items.filter((it) => it.exId === goal.exId).forEach((it) => work(it).forEach((x) => {
+        if (x.w != null && x.r != null && (!best || e1rm(x.w, x.r) > e1rm(best.w, best.r))) best = x;
+      })));
+      const hit = inRange.some((s) => s.items.some((it) => it.exId === goal.exId && work(it).some((x) => x.w >= goal.w && x.r >= goal.r)));
+      value = best ? e1rm(best.w, best.r) : 0;
+      if (hit) value = Math.max(value, target);
+    } else if (goal.kind === "custom") { value = goal.done ? 1 : 0; target = 1; }
+    const achieved = target > 0 && value >= target - 1e-9;
+    const span = end - start, elapsed = Math.min(Math.max(now - start, 0), span);
+    const expected = target * (elapsed / span);
+    return {
+      start, end, value, target, best, achieved,
+      pct: target ? Math.min(1, value / target) : 0,
+      daysLeft: Math.max(0, Math.ceil((end - now) / 86400000)),
+      ended: now >= end,
+      onPace: achieved || value >= expected - 1e-9,
+    };
+  }
+
+  // Month grid for the calendar, Monday first. Cells are ISO dates or null for padding.
+  function monthCells(year, month) {
+    const first = new Date(year, month, 1), days = new Date(year, month + 1, 0).getDate();
+    const pad = (first.getDay() + 6) % 7, cells = [];
+    for (let i = 0; i < pad; i++) cells.push(null);
+    for (let d = 1; d <= days; d++) cells.push(year + "-" + String(month + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0"));
+    while (cells.length % 7) cells.push(null);
+    return cells;
+  }
+
   // Library = built-ins (minus hidden, with user edits) + custom exercises.
   function buildLibrary(exState, includeHidden) {
     const st = exState || {};
@@ -337,7 +400,7 @@
       schema: 1, updatedAt: 0, consent: null, profile: null,
       settings: { unit: "lb", dist: "km", restSec: 120, tips: true, theme: "auto", adaptive: true, targetRir: 1 },
       exercises: { custom: [], edits: {}, hidden: [] },
-      templates: [], sessions: [],
+      templates: [], sessions: [], goals: [],
     };
   }
 
@@ -368,6 +431,7 @@
       });
     }
     s.templates = Array.isArray(raw.templates) ? raw.templates : [];
+    s.goals = Array.isArray(raw.goals) ? raw.goals.filter((g) => g && g.id && g.kind) : [];
     s.sessions = Array.isArray(raw.sessions) ? raw.sessions.filter((x) => x && !x.example && Array.isArray(x.items)) : [];
     return s;
   }
@@ -390,7 +454,7 @@
 
   Object.assign(RL, {
     RANGES, COMPOUND, LOAD_MEASURES, fw, round2, e1rm, repRange, incOf, wUnit, rUnit, goalTypes, goalLabel,
-    targetOf, progression, suggest, goalHistory, adapt, nextSetAdvice, metricOf, metricLabel, isPR, buildTemplates, plates, buildLibrary,
+    targetOf, progression, suggest, goalHistory, adapt, nextSetAdvice, metricOf, metricLabel, isPR, buildTemplates, plates, buildLibrary, periodRange, periodName, setVolume, goalProgress, monthCells,
     emptyState, normalizeState, toCSV,
   });
   root.RL = RL;

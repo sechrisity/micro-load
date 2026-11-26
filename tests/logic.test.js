@@ -186,3 +186,46 @@ test("next-set advice from RIR and quality", () => {
   assert.match(RL.nextSetAdvice(set(null, 10, { rir: 3 }), ex("push-up"), ctx).text, /11 reps/);
   assert.equal(RL.nextSetAdvice(set(5, 20, { rir: 3 }), ex("rowing-machine"), ctx), null);
 });
+
+test("period ranges", () => {
+  const t = new Date(2026, 10, 26, 15).getTime(); // 26 Nov 2026
+  assert.deepEqual(RL.periodRange("month", t), [new Date(2026, 10, 1).getTime(), new Date(2026, 11, 1).getTime()]);
+  assert.deepEqual(RL.periodRange("quarter", t), [new Date(2026, 9, 1).getTime(), new Date(2027, 0, 1).getTime()]);
+  assert.deepEqual(RL.periodRange("year", t), [new Date(2026, 0, 1).getTime(), new Date(2027, 0, 1).getTime()]);
+  assert.equal(RL.periodName("quarter", t), "Q4 2026");
+});
+
+test("goal progress", () => {
+  const now = new Date(2026, 10, 16).getTime(); // halfway through November
+  const day = (d) => new Date(2026, 10, d, 18).getTime();
+  const sess = (d, sets) => ({ status: "done", ts: day(d), items: [{ exId: "back-squat", sets }] });
+  const sessions = [
+    sess(2, [set(100, 5), set(100, 5, { warm: true })]),
+    sess(9, [set(102.5, 5), set(102.5, 4)]),
+    { status: "done", ts: new Date(2026, 9, 30).getTime(), items: [{ exId: "back-squat", sets: [set(120, 5)] }] }, // October, out of range
+  ];
+  const lookup = (id) => ex(id);
+  const w = RL.goalProgress({ kind: "workouts", period: "month", recurring: true, target: 8 }, sessions, lookup, now);
+  assert.equal(w.value, 2);
+  assert.equal(w.achieved, false);
+  assert.equal(w.onPace, false); // 2 of 8 at the halfway point
+  assert.equal(RL.goalProgress({ kind: "sets", period: "month", recurring: true, target: 3 }, sessions, lookup, now).value, 3);
+  assert.equal(RL.goalProgress({ kind: "volume", period: "month", recurring: true, target: 1000 }, sessions, lookup, now).value, Math.round(500 + 512.5 + 410));
+  const lift = RL.goalProgress({ kind: "lift", period: "month", recurring: true, exId: "back-squat", w: 102.5, r: 5 }, sessions, lookup, now);
+  assert.equal(lift.achieved, true);
+  const notYet = RL.goalProgress({ kind: "lift", period: "month", recurring: true, exId: "back-squat", w: 110, r: 5 }, sessions, lookup, now);
+  assert.equal(notYet.achieved, false);
+  assert.ok(notYet.pct > 0.9 && notYet.pct < 1);
+  const oneOff = RL.goalProgress({ kind: "workouts", period: "month", recurring: false, start: new Date(2026, 9, 5).getTime(), target: 1 }, sessions, lookup, now);
+  assert.equal(oneOff.ended, true);
+  assert.equal(oneOff.achieved, true);
+  assert.equal(RL.goalProgress({ kind: "custom", period: "year", recurring: false, start: now, done: true }, [], lookup, now).achieved, true);
+});
+
+test("month grid starts on Monday", () => {
+  const cells = RL.monthCells(2026, 10); // November 2026 starts on a Sunday
+  assert.equal(cells.length % 7, 0);
+  assert.equal(cells.slice(0, 6).every((c) => c === null), true);
+  assert.equal(cells[6], "2026-11-01");
+  assert.equal(cells.filter(Boolean).length, 30);
+});
