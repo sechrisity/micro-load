@@ -8,6 +8,7 @@ Micro Load runs as a single small container or as plain static files. It install
 
 ## Contents
 
+- [Use it on your phone](#use-it-on-your-phone)
 - [Features](#features)
 - [Screenshots](#screenshots)
 - [Quick start](#quick-start)
@@ -21,6 +22,44 @@ Micro Load runs as a single small container or as plain static files. It install
 - [Acknowledgements](#acknowledgements)
 - [Disclaimer](#disclaimer)
 - [License](#license)
+
+## Use it on your phone
+
+No app store and no account. Micro Load runs in your phone's web browser and installs to your home screen like any other app.
+
+### 1. Get a link
+
+Micro Load has to be hosted somewhere before you can open it. Ask the person who shared it with you for the link, or host your own copy (see [Quick start](#quick-start)). There is no app store version.
+
+### 2. Add it to your home screen
+
+| iPhone (Safari) | Android (Chrome) |
+|---|---|
+| Open the link in **Safari** | Open the link in **Chrome** |
+| Tap the **Share** button (square with an arrow) | Tap the **three dots** menu |
+| Tap **Add to Home Screen**, then **Add** | Tap **Install app** or **Add to Home screen** |
+| Open Micro Load from the new icon | Open Micro Load from the new icon |
+
+Opening it from the icon gives you the full-screen app. It keeps working at the gym with no signal.
+
+### 3. First time
+
+1. Read the disclaimer and tick both boxes.
+2. Answer the short survey: experience, goals, where you train, equipment and a health check. It takes about two minutes.
+3. Pick a starter routine on the Train tab and log your first set.
+
+### Keep your data safe
+
+- Unless you were told it syncs to a server, your log lives **only on that phone**, inside the browser.
+- Deleting the app, clearing Safari or Chrome data, or switching phones deletes it.
+- Every few weeks go to **Settings > Your data > Export backup** and save the file somewhere safe, like your notes, email or cloud storage.
+- On a new phone, **Settings > Your data > Import backup** brings everything back.
+
+### Good to know
+
+- **Rest timer sound:** iPhones cannot vibrate from a web app, so the timer plays a short sound instead. It follows the ring and silent switch.
+- **Updates** arrive on their own. If something looks out of date, close the app fully and open it again.
+- **Two phones:** use one phone for logging. Logging on two devices while offline can overwrite a session.
 
 ## Features
 
