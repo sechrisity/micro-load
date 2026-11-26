@@ -4,7 +4,7 @@
 |---|---|
 | Status | Research, not started |
 | Proposed | 2026-11-26 |
-| Depends on | Next-set suggestions, last-rep slowdown rating |
+| Depends on | Next-set suggestions (built), per-rep form labels |
 
 ## Contents
 
@@ -20,13 +20,15 @@
 
 ## Objective
 
-Let a user record a set on their phone and have Rep Ledger measure how the reps changed from first to last, then use that to decide whether to progress the next set or next session.
+Let a user record a set on their phone and have Rep Ledger detect form breakdown across the set, then use that to decide whether to progress the next set or next session.
 
 ## Core idea
 
-Compare each rep against the first rep of the same set. The user is their own baseline, so differences in height, limb length and build mostly cancel out. This avoids the need for a large dataset of different bodies.
+The deciding signal is form breakdown, not speed. With tempo controlled on purpose, rep speed should barely change across a good set, so a slowdown is at most a secondary flag. What matters is the small, often unnoticed ways a rep drifts from the first one: range of motion shortening, a joint path shifting, a hip or shoulder starting to compensate, a pause getting shorter.
 
-The approach follows velocity-based training: concentric speed drops as a set approaches failure, and the size of that drop is a well-studied proxy for reps in reserve.
+Each rep is compared with the first rep of the same set. The user is their own baseline, so differences in height, limb length and build mostly cancel out, and no large dataset of different bodies is needed to start.
+
+Breakdown is small and personal: what counts as a broken rep differs by lifter and takes experience to see. So thresholds are calibrated per user from their own labelled reps, not fixed for everyone.
 
 ## Pipeline
 
@@ -42,34 +44,40 @@ The approach follows velocity-based training: concentric speed drops as a set ap
 
 ## Metrics per set
 
+Ordered by weight in the decision.
+
 | Metric | Definition | Signals |
 |---|---|---|
-| Concentric time | Duration of the lifting phase per rep | Slowdown, proximity to failure |
-| Velocity loss | Last rep speed vs first rep speed, percent | Fatigue within the set |
 | Range of motion | Joint angle travel per rep vs rep 1 | Shortened reps |
 | Path deviation | Drift of key joints from rep 1's path | Form breakdown |
-| Tempo consistency | Variance of eccentric and pause durations | Control |
+| Compensation | New movement in joints that should stay still (hip shift, torso lean, shoulder shrug) | Breakdown the lifter may not feel |
+| Symmetry | Left vs right angle difference compared with rep 1 | One side taking over |
+| Tempo consistency | Eccentric, pause and concentric durations vs rep 1 | Control slipping, pauses shortening |
+| Velocity loss | Last rep speed vs first rep speed | Secondary flag only, since tempo is controlled |
 
 ## How it feeds progression
 
 | Observation | Suggested action |
 |---|---|
-| Low velocity loss, full range, target reps hit | Progress next set or next session |
-| Moderate velocity loss, form holds | Hold load, aim for the same reps |
-| High velocity loss or range of motion drops | Hold or reduce, flag reps that did not count |
-| Path deviation grows across reps | Hold load, add a form cue to the set note |
+| All reps within the user's tolerance of rep 1 | Progress next set or next session |
+| Drift starts only on the final rep | Hold load, aim for the same reps cleaner |
+| Drift starts mid-set or compensation appears | Hold or reduce, flag reps that did not count |
+| Range of motion drops on several reps | Count only full reps, hold load |
 
-Thresholds are placeholders until validated on recorded sets.
+Tolerances are per user and per exercise, set from calibration below.
 
 ## Data needed
 
-Validation data, not training data. The pose model is already trained.
+Validation and calibration data, not training data. The pose model is already trained.
 
 | Data | Amount | Source |
 |---|---|---|
 | Side-view recordings of real sets | A few dozen sets per exercise to start | Own training |
-| Label per set | RIR, or reps to failure on a test set | Logged in Rep Ledger at the time |
-| Varied lifters | Later, to check thresholds generalise | Volunteers who opt in |
+| Per-rep label | Clean or broke down, marked by the lifter or a coach watching the replay | Labelled in the app after the set |
+| Per-set label | RIR and quality, as logged today | Rep Ledger |
+| Varied lifters | Later, to check the approach generalises | Volunteers who opt in |
+
+The per-rep labels are what tune each user's tolerances. Experienced lifters label more precisely, so the app should let a coach review and relabel.
 
 ## Constraints
 
@@ -84,15 +92,16 @@ Validation data, not training data. The pose model is already trained.
 
 | Phase | Scope | Exit check |
 |---|---|---|
-| 0 | Ship the manual last-rep slowdown rating and next-set suggestions | Used for several weeks of real training |
+| 0 | Next-set suggestions (done); add a per-rep clean or broke-down label to logged sets | Used for several weeks of real training |
 | 1 | Offline script: pose and per-rep metrics on recorded files for one lift (side-view squat or a machine press) | Rep count matches manual count on all test sets |
-| 2 | Velocity loss vs logged RIR on own recordings | Clear relationship, thresholds chosen |
+| 2 | Breakdown metrics vs per-rep labels on own recordings | Metrics separate clean from broken reps, tolerances chosen |
 | 3 | In-app recording for that lift, results shown next to the set | Works on a mid-range phone without upload |
 | 4 | Feed metrics into suggestions, add lifts one at a time | Suggestions agree with logged outcomes |
 
 ## Open questions
 
 - Which two exercises film most reliably in a typical gym?
-- Is joint-angle velocity a good enough stand-in for bar velocity on machines?
+- Which compensation patterns matter most per exercise, and can they be listed as rules a coach can edit?
+- How few labelled reps does a new user need before their tolerances are usable?
 - How much does phone placement vary between sessions, and can the app correct for it?
 - Should derived metrics sync to the server, or stay on the device that recorded them?

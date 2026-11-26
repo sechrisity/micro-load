@@ -272,12 +272,14 @@
     const c0 = ctx();
     session.items.forEach((it) => {
       const ex = exById(it.exId);
-      const last = lastFor(it.exId, session.status === "active" ? null : session.ts, session.id);
+      const before = session.status === "active" ? null : session.ts;
+      const last = lastFor(it.exId, before, session.id);
+      const hist = S.settings.adaptive !== false ? RL.goalHistory(S.sessions, ex, c0, { beforeTs: before, excludeId: session.id }) : null;
       const wi = workIndex(it.sets);
       it.sets.forEach((c, i) => {
         if (c.warm) { c.goal = null; c.why = ""; return; }
         if (!c.done || c.goalAuto === false) return;
-        const sg = RL.suggest(c, last ? last.it.sets[wi[i]] : null, ex, c0);
+        const sg = RL.adapt(RL.suggest(c, last ? last.it.sets[wi[i]] : null, ex, c0), hist);
         c.goal = sg ? sg.g : null;
         c.why = sg ? sg.why : "";
       });
@@ -389,13 +391,26 @@
       <div class="card-h"><span class="handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span><span class="slotno">${i + 1}</span><div class="nm">${esc(ex.name)}</div><span class="sub">${esc(rangeText(ex))}</span><button class="iconbtn" data-act="rmitem" data-i="${i}" aria-label="Remove ${esc(ex.name)}">×</button></div>
       ${ex.cues ? `<details class="cues"><summary>Cues</summary>${esc(ex.cues)}</details>` : ""}
       <div class="last">${lastTxt}</div>
-      <div class="sets">${it.sets.map((c, si) => setHTML(it, ex, c, si, wi[si], last && wi[si] >= 0 ? last.it.sets[wi[si]] : null, i, prior, c0)).join("")}</div>
+      <div class="sets">${it.sets.map((c, si) => setHTML(it, ex, c, si, wi[si], last && wi[si] >= 0 ? last.it.sets[wi[si]] : null, i, prior, c0, adviceFor(it, si, ex, c0))).join("")}</div>
       <div class="card-f"><button class="btn sm" data-act="addset" data-i="${i}">+ Set</button>${it.sets.length > 1 ? `<button class="btn sm" data-act="rmset" data-i="${i}">- Set</button>` : ""}
         <textarea data-f="note" data-i="${i}" rows="1" placeholder="Notes: setup, cues, how it felt" aria-label="Exercise notes">${esc(it.note)}</textarea></div>
     </li>`;
   }
 
-  function setHTML(it, ex, c, si, w, p, i, prior, c0) {
+  // Advice for set si from the most recent logged working set before it in the same exercise.
+  function adviceFor(it, si, ex, c0) {
+    const c = it.sets[si];
+    if (c.done || c.warm) return null;
+    for (let j = si - 1; j >= 0; j--) {
+      const x = it.sets[j];
+      if (x.warm) continue;
+      if (!x.done) return null;
+      const a = RL.nextSetAdvice(x, ex, c0, S.settings.targetRir);
+      return a ? Object.assign({ from: j }, a) : null;
+    }
+    return null;
+  }
+  function setHTML(it, ex, c, si, w, p, i, prior, c0, adv) {
     const t = c.warm ? null : RL.targetOf(p, ex, c0), pg = p && p.goal, k = it.uid + ":" + si;
     const cw = c.w ?? (RL.LOAD_MEASURES.has(ex.measure) ? null : 0);
     const hit = t && c.done && cw != null && c.r != null && cw >= t.w && c.r >= t.r;
@@ -426,6 +441,7 @@
       <div class="inputs"><label class="num"><input type="number" step="any" inputmode="decimal" value="${c.w ?? ""}" placeholder="${t ? fw(t.w) : "0"}" data-f="w" ${d} aria-label="${isCardio ? "Distance" : "Load"}"><span>${esc(RL.wUnit(ex, c0))}</span></label>
         <span class="x">×</span><label class="num"><input class="reps" type="number" step="${isCardio ? "any" : ex.measure === "time" ? "1" : "0.5"}" inputmode="decimal" value="${c.r ?? ""}" placeholder="${t ? t.r : "0"}" data-f="r" ${d} aria-label="${esc(RL.rUnit(ex))}"><span>${RL.rUnit(ex)}</span></label>
         ${showRir ? `<label class="rir"><select data-f="rir" ${d} aria-label="Reps in reserve"><option value="">RIR</option>${[0, 1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${c.rir === n ? "selected" : ""}>${n} RIR</option>`).join("")}</select></label>` : ""}${plateBtn}</div>
+      ${adv ? `<div class="advice ${adv.action}"><span>Next set</span> ${esc(adv.text)}${adv.w != null && adv.w !== c.w ? ` <button class="btn sm" data-act="applyadv" ${d} data-v="${adv.w}">Use ${fw(adv.w)}</button>` : ""}</div>` : ""}
       ${c.warm ? "" : `<div class="q"><span class="q-label">Quality</span><div class="qscale">${qs}</div><button class="linkbtn" data-act="bd" data-k="${k}">${openBd[k] ? "Hide breakdown" : "Rate form, tempo, breathing"}</button></div>`}
       ${p && p.note ? `<div class="lastnote"><span>Last time</span> ${esc(p.note)}</div>` : ""}
       <input class="setnote" type="text" value="${esc(c.note || "")}" placeholder="Set note: cue, pain, setup, what to fix" data-f="snote" ${d} aria-label="Note for this set">
@@ -625,6 +641,11 @@
       <div class="panel"><h2>Rest timer</h2>
         <p class="muted small">Starts when you log a set. Vibrates when time is up on devices that support it.</p>
         <div class="setrow">${seg("setrest", st.restSec, [[0, "Off"], [60, "1:00"], [90, "1:30"], [120, "2:00"], [180, "3:00"], [240, "4:00"]])}</div></div>
+      <div class="panel"><h2>Coaching</h2>
+        <div class="setrow"><span>Target RIR for working sets</span>${seg("setrir", st.targetRir ?? 1, [[0, "0"], [1, "1"], [2, "2"], [3, "3"]])}</div>
+        <p class="muted small">After each logged set, the next set gets advice: more load if you had reps to spare beyond this target, less if you fell short of your range at 0 RIR.</p>
+        <div class="setrow"><span>Learn from my history</span>${seg("setadapt", st.adaptive !== false ? "on" : "off", [["on", "On"], ["off", "Off"]])}</div>
+        <p class="muted small">Tracks which goals you actually hit on each exercise. If microloads keep missing but extra reps land (or the other way round), suggestions switch. Needs 3 attempts before it changes anything.</p></div>
       <div class="panel"><h2>Routines</h2>
         <div class="tlist">${S.templates.map((t) => `<div class="row"><span class="nm">${esc(t.name)} <span class="muted small">${t.exIds.length} exercises</span></span><button class="btn sm" data-act="tstart" data-id="${esc(t.id)}">Start</button><button class="iconbtn" data-act="tdel" data-id="${esc(t.id)}" aria-label="Delete routine ${esc(t.name)}">×</button></div>`).join("") || `<div class="muted small">No routines. Save one from a session, or rebuild the starter set.</div>`}</div>
         <div class="btnrow"><button class="btn sm" data-act="rebuild">Rebuild starter routines</button></div></div>
@@ -775,6 +796,7 @@
       }
       case "goalauto": { s.items[i].sets[si].goalAuto = true; applyAuto(s); queue(); rerenderCard(i); break; }
       case "plates": openPlates(i, si); break;
+      case "applyadv": { s.items[i].sets[si].w = +b.dataset.v; queue(); rerenderCard(i); break; }
       case "finish": {
         if (!s.items.some((it) => it.sets.some((x) => x.done))) { modal(`<div class="mh"><h2>Nothing logged yet</h2></div><p>Tap <b>Log set</b> on at least one set before finishing, or discard the session.</p><button class="btn" data-act="close">OK</button>`, true); break; }
         s.items.forEach((it) => { it.sets = it.sets.filter((x) => x.done); });
@@ -828,6 +850,8 @@
       case "settheme": S.settings.theme = b.dataset.v; applyTheme(); queue(); render(); break;
       case "settips": S.settings.tips = b.dataset.v === "on"; queue(); render(); break;
       case "setrest": S.settings.restSec = +b.dataset.v; queue(); render(); break;
+      case "setrir": S.settings.targetRir = +b.dataset.v; queue(); render(); break;
+      case "setadapt": S.settings.adaptive = b.dataset.v === "on"; queue(); render(); break;
       case "tadj": timerEnd += +b.dataset.v * 1000; drawTimer(); break;
       case "tskip": stopTimer(); break;
       case "export": download("rep-ledger-backup-" + today() + ".json", JSON.stringify(S, null, 2), "application/json"); break;

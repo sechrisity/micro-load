@@ -15,6 +15,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - Insert an exercise between any two exercises in a session.
 - Measures for per-side, per-dumbbell, pin or setting, bodyweight, timed holds and cardio.
 - Warm-up sets, rest timer, plate calculator and personal record detection.
+- Adaptive suggestions that learn which goal types land on each exercise.
+- Next-set advice within a session from RIR against a configurable target.
 - History statistics: sessions per week and month, week streak, sets per muscle group.
 - JSON backup export and import, CSV export, delete all data.
 - Optional HTTP Basic auth, strict security headers, non-root read-only container.

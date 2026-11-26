@@ -144,3 +144,45 @@ test("CSV export escapes fields", () => {
   assert.match(csv, /"felt ""good"", easy"/);
   assert.equal(csv.trim().split("\n").length, 2);
 });
+
+// history helper: sessions where each set's goal and outcome are given
+function hist(ex, rows) {
+  // rows: [[w, r, goalType]] one working set per session, oldest first
+  return rows.map(([w, r, g], i) => ({ id: "s" + i, status: "done", ts: i + 1, items: [{ exId: ex.id, sets: [set(w, r, { goal: g ? { type: g } : null })] }] }));
+}
+
+test("goal history counts hits per goal type", () => {
+  const bench = ex("barbell-bench-press");
+  // micro tried 3 times (1 hit), rep tried once (hit)
+  const h = RL.goalHistory(hist(bench, [[185, 6, "micro"], [190, 6, "micro"], [190, 6, "micro"], [190, 6, "rep"], [190, 7, null]]), bench, ctx);
+  assert.deepEqual(h.micro, { tries: 3, hits: 1 });
+  assert.deepEqual(h.rep, { tries: 1, hits: 1 });
+  assert.deepEqual(h.add, { tries: 0, hits: 0 });
+});
+
+test("adapt switches away from a goal type that keeps missing", () => {
+  const micro = { g: { type: "micro" }, why: "x" };
+  assert.equal(RL.adapt(micro, { micro: { tries: 4, hits: 1 }, rep: { tries: 3, hits: 3 } }).g.type, "rep");
+  assert.equal(RL.adapt(micro, { micro: { tries: 4, hits: 1 }, rep: { tries: 0, hits: 0 } }).g.type, "rep");
+  assert.equal(RL.adapt(micro, { micro: { tries: 4, hits: 0 }, rep: { tries: 3, hits: 0 } }).g.type, "hold");
+  assert.equal(RL.adapt(micro, { micro: { tries: 2, hits: 0 }, rep: { tries: 0, hits: 0 } }).g.type, "micro"); // not enough data
+  const good = RL.adapt(micro, { micro: { tries: 3, hits: 3 }, rep: { tries: 0, hits: 0 } });
+  assert.equal(good.g.type, "micro");
+  assert.match(good.why, /3 of your last 3/);
+  assert.equal(RL.adapt({ g: { type: "hold" }, why: "" }, { micro: { tries: 5, hits: 0 } }).g.type, "hold");
+});
+
+test("next-set advice from RIR and quality", () => {
+  const bench = ex("barbell-bench-press"); // 6-10, inc 5
+  assert.equal(RL.nextSetAdvice(set(185, 8, { rir: 3 }), bench, ctx).w, 190);
+  assert.equal(RL.nextSetAdvice(set(185, 8, { rir: 4 }), bench, ctx).w, 195);
+  assert.equal(RL.nextSetAdvice(set(185, 8, { rir: 1 }), bench, ctx).action, "same");
+  const down = RL.nextSetAdvice(set(185, 4, { rir: 0 }), bench, ctx);
+  assert.equal(down.action, "down");
+  assert.equal(down.w, 170);
+  assert.equal(RL.nextSetAdvice(set(185, 8, { rir: 3, q: 5 }), bench, ctx).action, "clean");
+  assert.equal(RL.nextSetAdvice(set(185, 8), bench, ctx), null);
+  assert.equal(RL.nextSetAdvice(set(185, 8, { rir: 3, warm: true }), bench, ctx), null);
+  assert.match(RL.nextSetAdvice(set(null, 10, { rir: 3 }), ex("push-up"), ctx).text, /11 reps/);
+  assert.equal(RL.nextSetAdvice(set(5, 20, { rir: 3 }), ex("rowing-machine"), ctx), null);
+});

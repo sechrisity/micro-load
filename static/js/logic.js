@@ -168,6 +168,91 @@
     }
   }
 
+  // How often each goal type has landed for one exercise, from finished sessions only.
+  // sessions: all sessions; returns { rep: {tries, hits}, micro: {...}, add: {...} } over the last `window` tries of each.
+  function goalHistory(sessions, ex, ctx, opts) {
+    const o = Object.assign({ beforeTs: null, excludeId: null, window: 6 }, opts);
+    const done = sessions.filter((s) => s.status === "done" && s.id !== o.excludeId && (o.beforeTs == null || s.ts < o.beforeTs))
+      .sort((a, b) => a.ts - b.ts);
+    const work = (it) => it.sets.filter((x) => x.done && !x.warm);
+    const log = { rep: [], micro: [], add: [] };
+    let prev = null;
+    for (const s of done) {
+      const it = s.items.find((i) => i.exId === ex.id && work(i).length);
+      if (!it) continue;
+      const cur = work(it);
+      if (prev) {
+        cur.forEach((c, i) => {
+          const p = prev[i];
+          const type = p && p.goal && p.goal.type;
+          if (!log[type]) return;
+          const t = targetOf(p, ex, ctx);
+          if (!t || c.r == null) return;
+          log[type].push((load(ex, c.w) ?? 0) >= t.w - 1e-9 && c.r >= t.r);
+        });
+      }
+      prev = cur;
+    }
+    const out = {};
+    Object.keys(log).forEach((k) => {
+      const recent = log[k].slice(-o.window);
+      out[k] = { tries: recent.length, hits: recent.filter(Boolean).length };
+    });
+    return out;
+  }
+
+  // Adjust a rule-based suggestion using the user's own hit rate on this exercise.
+  // Needs at least `min` tries before it overrides anything.
+  function adapt(sg, hist, min) {
+    if (!sg || !hist) return sg;
+    const need = min || 3;
+    const type = sg.g.type;
+    if (type !== "rep" && type !== "micro") return sg;
+    const h = hist[type], other = type === "rep" ? "micro" : "rep", o = hist[other];
+    const rate = (x) => (x && x.tries ? x.hits / x.tries : null);
+    const name = { rep: "Adding a rep", micro: "Microloading" };
+    if (!h || h.tries < need) return sg;
+    const r = rate(h), ro = rate(o);
+    const tally = h.hits + " of your last " + h.tries + " tries";
+    if (r <= 1 / 3) {
+      if (o && o.tries >= need && ro >= 0.5) {
+        return { g: { type: other }, why: name[type] + " has landed " + tally + " on this exercise, while " + name[other].toLowerCase() + " landed " + o.hits + " of " + o.tries + ". Switching.", adapted: true };
+      }
+      if (o && o.tries >= need && ro <= 1 / 3) {
+        return { g: { type: "hold" }, why: "Recent progress attempts on this exercise mostly missed (" + name[type].toLowerCase() + ": " + tally + "). Consolidate before pushing again.", adapted: true };
+      }
+      if (!o || o.tries < need) {
+        return { g: { type: other }, why: name[type] + " has landed " + tally + " on this exercise. Try " + name[other].toLowerCase() + " instead.", adapted: true };
+      }
+    }
+    if (r >= 2 / 3) return Object.assign({}, sg, { why: sg.why + " " + name[type] + " has landed " + tally + " here." });
+    return sg;
+  }
+
+  // Advice for the next set in the same session, from the set just logged.
+  // RIR above the target means the load was light; 0 RIR short of the range means it was heavy.
+  function nextSetAdvice(c, ex, ctx, targetRir) {
+    if (!c || !c.done || c.warm || c.r == null || ex.measure === "cardio" || ex.measure === "time") return null;
+    const tr = targetRir == null ? 1 : targetRir;
+    const range = repRange(ex, ctx.goal);
+    if (c.q != null && c.q < 6) return { action: "clean", text: "Quality was " + c.q + "/10. Same load next set, focus on clean reps." };
+    if (c.rir == null) return null;
+    const isLoad = LOAD_MEASURES.has(ex.measure) && c.w != null;
+    const inc = incOf(ex, ctx.unit);
+    if (c.rir >= tr + 2) {
+      const steps = c.rir >= tr + 3 ? 2 : 1;
+      if (!isLoad) return { action: "up", text: c.rir + " RIR left. Aim for " + (c.r + steps) + " " + rUnit(ex) + " next set." };
+      const w = round2(c.w + steps * inc);
+      return { action: "up", w, text: c.rir + " RIR left. Try " + fw(w) + " " + wUnit(ex, ctx) + " next set." };
+    }
+    if (c.rir === 0 && range && c.r < range[0]) {
+      if (!isLoad) return { action: "down", text: "Short of " + range[0] + " " + rUnit(ex) + " at 0 RIR. Use an easier variation or assistance next set." };
+      const w = Math.max(0, round2(Math.floor((c.w * 0.92) / inc) * inc));
+      return { action: "down", w, text: "Short of " + range[0] + " reps at 0 RIR. Drop to " + fw(w) + " " + wUnit(ex, ctx) + " next set." };
+    }
+    return { action: "same", text: "On target. Same load next set." };
+  }
+
   // Number used for charts and personal records.
   function metricOf(ex, s) {
     if (LOAD_MEASURES.has(ex.measure)) return e1rm(s.w, s.r);
@@ -250,7 +335,7 @@
   function emptyState() {
     return {
       schema: 1, updatedAt: 0, consent: null, profile: null,
-      settings: { unit: "lb", dist: "km", restSec: 120, tips: true, theme: "auto" },
+      settings: { unit: "lb", dist: "km", restSec: 120, tips: true, theme: "auto", adaptive: true, targetRir: 1 },
       exercises: { custom: [], edits: {}, hidden: [] },
       templates: [], sessions: [],
     };
@@ -305,7 +390,7 @@
 
   Object.assign(RL, {
     RANGES, COMPOUND, LOAD_MEASURES, fw, round2, e1rm, repRange, incOf, wUnit, rUnit, goalTypes, goalLabel,
-    targetOf, progression, suggest, metricOf, metricLabel, isPR, buildTemplates, plates, buildLibrary,
+    targetOf, progression, suggest, goalHistory, adapt, nextSetAdvice, metricOf, metricLabel, isPR, buildTemplates, plates, buildLibrary,
     emptyState, normalizeState, toCSV,
   });
   root.RL = RL;

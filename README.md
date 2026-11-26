@@ -33,6 +33,8 @@ Rep Ledger runs as a single small container or as plain static files. It install
 | Set detail | Load, reps, RIR, a 1-10 quality score with optional breakdown (form, execution, tempo, breathing, range of motion), set notes and warm-up flag |
 | Measures | Total load, load per side, per dumbbell, pin or setting, bodyweight with added or assisted load, timed holds, and distance plus time for cardio |
 | Progression | After each set, a suggested goal for next session (+1 rep, microload, add load, hold, longer pauses, or custom). Accept it or override it |
+| Adaptive suggestions | Tracks which goals you actually hit on each exercise and switches between microloads and extra reps when one keeps missing |
+| Next-set advice | After a logged set, the next set suggests more load, the same load or less, based on your RIR against a target you set |
 | Tools | Rest timer with vibration, barbell plate calculator, personal record detection |
 | History | Session cards, a logbook view per session, weekly and monthly counts, week streak, and working sets per muscle group over the last 7 days |
 | Progress | Per-exercise chart of estimated 1RM (or best reps, time or distance) with average quality, plus a session table |
@@ -134,6 +136,32 @@ Rep ranges default from your top-priority goal and are wider for isolation work 
 | Build muscle | 6-10 | 8-15 |
 | General fitness | 8-12 | 10-15 |
 | Endurance | 12-20 | 15-25 |
+
+### Learning from your history
+
+The rules above are the starting point. Rep Ledger also records whether each goal landed: if last session asked for a microload, did you hit the new load at the same reps? Once an exercise has at least 3 attempts of a goal type in the last 6:
+
+| Your record on this exercise | What changes |
+|---|---|
+| Microloads land a third of the time or less, extra reps land half the time or more | Suggests +1 rep instead |
+| Extra reps land a third of the time or less, microloads land half the time or more | Suggests a microload instead |
+| Both mostly miss | Suggests holding to consolidate |
+| The suggested goal lands two thirds of the time or more | Keeps it and says so |
+
+Turn this off under **Settings > Coaching**.
+
+### Next-set advice
+
+After you log a working set with an RIR, the next set shows advice against your target RIR (default 1, set in **Settings > Coaching**):
+
+| Logged set | Next set |
+|---|---|
+| Quality below 6/10 | Same load, focus on clean reps |
+| RIR at least 2 above target | Add one microload step (two if 3 or more above) |
+| 0 RIR and short of the rep range | Drop about 8%, rounded to your microload step |
+| Otherwise | Same load |
+
+One tap applies the suggested load.
 
 Timed holds default to 20-60 seconds and progress in 5-second steps. Cardio progresses by distance. Estimated 1RM uses the Epley formula. Any exercise's range and microload can be changed on the Exercises tab.
 
