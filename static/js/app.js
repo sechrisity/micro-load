@@ -675,9 +675,10 @@
     if (g.kind === "volume") return num0(pr.value) + " of " + num0(pr.target) + " " + u;
     return pr.value + " of " + pr.target;
   }
-  function goalStatus(pr) {
+  function goalStatus(pr, g) {
     if (pr.achieved) return `<span class="badge up">${ic("check", "sm")}Done</span>`;
     if (pr.ended) return `<span class="badge down">Missed</span>`;
+    if (g && g.kind === "custom") return `<span class="badge">To do</span>`;
     return pr.onPace ? `<span class="badge first">On pace</span>` : `<span class="badge hold">Behind</span>`;
   }
   function goalRow(g, pr) {
@@ -685,7 +686,7 @@
         <span class="t">${esc(goalTitle(g))}</span>
         <span class="d">${esc(goalDetail(g, pr))}${pr.ended || pr.achieved ? "" : " · " + plural(pr.daysLeft, "day") + " left"}${g.recurring ? " · repeats" : ""}</span>
         <progress max="100" value="${Math.round(pr.pct * 100)}" aria-label="${Math.round(pr.pct * 100)} percent">${Math.round(pr.pct * 100)}%</progress>
-      </span><span class="end">${goalStatus(pr)}</span></button>`;
+      </span><span class="end">${goalStatus(pr, g)}</span></button>`;
   }
   function renderGoals() {
     const now = Date.now();
@@ -732,7 +733,7 @@
     modal(`<div class="mh"><h2>${esc(goalTitle(g))}</h2><button class="iconbtn" data-act="close" aria-label="Close">${ic("x")}</button></div>
       <p>${esc(RL.periodName(g.period, pr.start))} · ${esc(goalDetail(g, pr))}${pr.ended ? "" : " · " + plural(pr.daysLeft, "day") + " left"}</p>
       <div class="goalbar"><progress max="100" value="${Math.round(pr.pct * 100)}"></progress><b>${Math.round(pr.pct * 100)}%</b></div>
-      <div class="resline">${goalStatus(pr)}${g.recurring ? `<span class="badge">Repeats every ${g.period}</span>` : ""}</div>
+      <div class="resline">${goalStatus(pr, g)}${g.recurring ? `<span class="badge">Repeats every ${g.period}</span>` : ""}</div>
       <div class="ctabar">${g.kind === "custom" ? `<button class="btn primary" data-act="goaltoggle" data-id="${esc(g.id)}">${g.done ? "Mark not done" : "Mark done"}</button>` : `<button class="btn primary" data-act="close">Done</button>`}
         <button class="btn danger back" data-act="goaldel" data-id="${esc(g.id)}" aria-label="Delete goal">${ic("trash")}</button></div>`, true);
   }
@@ -813,7 +814,7 @@
         ${rowBtn("survey", "", "Retake survey", "", "")}</div>`, p.readinessFlag ? "Your health check flagged at least one item. Keep your physician or a qualified professional in the loop as you train" : ""))
       + sec("Units and display", `<div class="group">${setRow("Weight", seg("setunit", st.unit, [["lb", "lb"], ["kg", "kg"]]))}${setRow("Distance", seg("setdist", st.dist, [["km", "km"], ["mi", "mi"]]))}${setRow("Appearance", seg("settheme", st.theme, [["auto", "Auto"], ["light", "Light"], ["dark", "Dark"]]))}${setRow("Tips on Train", seg("settips", st.tips ? "on" : "off", [["on", "On"], ["off", "Off"]]))}</div>`,
         "Changing units relabels your log. It does not convert numbers you already entered")
-      + sec("Rest timer", `<div class="group"><div class="row">${seg("setrest", st.restSec, personal ? [[0, "Off"], [180, "3:00"], [240, "4:00"], [300, "5:00"]] : [[0, "Off"], [60, "1:00"], [90, "1:30"], [120, "2:00"], [180, "3:00"], [240, "4:00"]])}</div></div>`, "Starts when you log a set")
+      + sec("Rest timer", `<div class="group">${setRow("Sound when rest ends", seg("setsound", st.sound !== false ? "on" : "off", [["on", "On"], ["off", "Off"]]))}<div class="row">${seg("setrest", st.restSec, personal ? [[0, "Off"], [180, "3:00"], [240, "4:00"], [300, "5:00"]] : [[0, "Off"], [60, "1:00"], [90, "1:30"], [120, "2:00"], [180, "3:00"], [240, "4:00"]])}</div></div>`, "Starts when you log a set. On iPhone the sound follows the ring and silent switch")
       + sec("Coaching", `<div class="group">${setRow("Target RIR", seg("setrir", st.targetRir ?? 1, [[0, "0"], [1, "1"], [2, "2"], [3, "3"]]))}${setRow("Next-set advice", seg("setadvice", st.advice !== false ? "on" : "off", [["on", "On"], ["off", "Off"]]))}${setRow("Learn from my history", seg("setadapt", st.adaptive !== false ? "on" : "off", [["on", "On"], ["off", "Off"]]))}</div>`,
         "Next-set advice compares your RIR with the target. Learning from history switches between microloads and extra reps when one keeps missing on an exercise, after 3 attempts")
       + sec("Routines", `<div class="group">${S.templates.map((t) => `<div class="row"><span class="body"><span class="t">${esc(t.name)}</span><span class="d">${plural(t.exIds.length, "exercise")}</span></span><button class="btn sm" data-act="tstart" data-id="${esc(t.id)}">Start</button><button class="iconbtn" data-act="tdel" data-id="${esc(t.id)}" aria-label="Delete routine ${esc(t.name)}">${ic("trash")}</button></div>`).join("")}
@@ -830,9 +831,32 @@
   }
 
   /* ---------- rest timer ---------- */
-  let timerEnd = 0, timerInt = null;
+  let timerEnd = 0, timerInt = null, audio = null;
+  // iPhones don't let web apps vibrate, so the end of rest is also a sound. The audio context must be
+  // created during a tap, which is why it starts here and not when the timer runs out.
+  function primeAudio() {
+    if (S.settings.sound === false) return;
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.state === "suspended") audio.resume();
+    } catch (e) { audio = null; }
+  }
+  function chime() {
+    if (!audio || S.settings.sound === false) return;
+    const t0 = audio.currentTime + 0.05;
+    [0, 0.28, 0.56].forEach((d, i) => {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = "sine"; o.frequency.value = i === 2 ? 1175 : 880;
+      g.gain.setValueAtTime(0.0001, t0 + d);
+      g.gain.exponentialRampToValueAtTime(0.3, t0 + d + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.22);
+      o.connect(g).connect(audio.destination);
+      o.start(t0 + d); o.stop(t0 + d + 0.25);
+    });
+  }
   function startTimer(sec) {
     if (!sec) return;
+    primeAudio();
     timerEnd = Date.now() + sec * 1000;
     clearInterval(timerInt);
     timerInt = setInterval(drawTimer, 250);
@@ -844,6 +868,7 @@
     if (left <= 0) {
       clearInterval(timerInt); timerInt = null;
       if (navigator.vibrate) navigator.vibrate([250, 120, 250]);
+      chime();
       $("#timer").innerHTML = `<div class="timer done" role="status"><span class="lbl">Rest</span><b>Go</b><button data-act="tskip">Close</button></div>`;
       setTimeout(() => { if (!timerInt) $("#timer").innerHTML = ""; }, 6000);
       return;
@@ -1052,6 +1077,7 @@
       case "setrest": S.settings.restSec = +b.dataset.v; queue(); render(); break;
       case "setrir": S.settings.targetRir = +b.dataset.v; queue(); render(); break;
       case "setadapt": S.settings.adaptive = b.dataset.v === "on"; queue(); render(); break;
+      case "setsound": S.settings.sound = b.dataset.v === "on"; if (S.settings.sound) { primeAudio(); chime(); } queue(); render(); break;
       case "setadvice": S.settings.advice = b.dataset.v === "on"; queue(); render(); break;
       case "setbuiltins": S.settings.builtins = b.dataset.v === "on"; refreshLib(); queue(); render(); break;
       case "tadj": timerEnd += +b.dataset.v * 1000; drawTimer(); break;

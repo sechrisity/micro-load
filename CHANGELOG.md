@@ -14,7 +14,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Starter routines generated from schedule and equipment; save any session as a routine.
 - Insert an exercise between any two exercises in a session.
 - Measures for per-side, per-dumbbell, pin or setting, bodyweight, timed holds and cardio.
-- Warm-up sets, rest timer, plate calculator and personal record detection.
+- Warm-up sets, rest timer with an end-of-rest sound (iPhones cannot vibrate from the web), plate calculator and personal record detection.
 - Adaptive suggestions that learn which goal types land on each exercise.
 - Next-set advice within a session from RIR against a configurable target.
 - History statistics: sessions per week and month, week streak, sets per muscle group, and a month calendar of training days.

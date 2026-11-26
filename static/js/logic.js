@@ -399,7 +399,7 @@
   function emptyState() {
     return {
       schema: 1, updatedAt: 0, consent: null, profile: null,
-      settings: { unit: "lb", dist: "km", restSec: 120, tips: true, theme: "auto", adaptive: true, advice: true, builtins: true, targetRir: 1 },
+      settings: { unit: "lb", dist: "km", restSec: 120, tips: true, theme: "auto", adaptive: true, advice: true, builtins: true, targetRir: 1, sound: true },
       exercises: { custom: [], edits: {}, hidden: [] },
       templates: [], sessions: [], goals: [],
     };

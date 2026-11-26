@@ -9,6 +9,7 @@ Rep Ledger runs as a single small container or as plain static files. It install
 ## Contents
 
 - [Features](#features)
+- [Screenshots](#screenshots)
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
 - [Hosting options](#hosting-options)
@@ -35,12 +36,28 @@ Rep Ledger runs as a single small container or as plain static files. It install
 | Progression | After each set, a suggested goal for next session (+1 rep, microload, add load, hold, longer pauses, or custom). Accept it or override it |
 | Adaptive suggestions | Tracks which goals you actually hit on each exercise and switches between microloads and extra reps when one keeps missing |
 | Next-set advice | After a logged set, the next set suggests more load, the same load or less, based on your RIR against a target you set |
-| Tools | Rest timer with vibration, barbell plate calculator, personal record detection |
+| Tools | Rest timer with a sound and vibration when rest ends, barbell plate calculator, personal record detection |
 | History | Month calendar with training days marked (tap a day to open it), a logbook view per session, weekly and monthly counts, week streak, and working sets per muscle group over the last 7 days |
 | Goals | Monthly, quarterly and yearly goals: number of workouts, working sets, total volume, a load and reps to hit on a lift, or anything else you tick off yourself. Progress, days left and an on-pace check, with optional repeat every period |
 | Progress | Per-exercise chart of estimated 1RM (or best reps, time or distance) with average quality, plus a session table |
 | Data | Export a full JSON backup, export every set as CSV, import a backup, delete everything |
 | Offline | Installable PWA. Logs save on the device first and sync to the server when it is reachable |
+
+## Screenshots
+
+Made-up training data. Light and dark themes follow your device, or set one in Settings.
+
+| Logging a set | History and calendar | Goals |
+|---|---|---|
+| <img src="docs/screenshots/workout.png" width="240" alt="A logged squat set with RIR, quality, progress badge and next-session goal"> | <img src="docs/screenshots/history.png" width="240" alt="Month calendar with training days filled in, and weekly stats"> | <img src="docs/screenshots/goals.png" width="240" alt="Monthly, quarterly and yearly goals with progress bars"> |
+
+| Exercise progress | Dark theme | Routines |
+|---|---|---|
+| <img src="docs/screenshots/exercise.png" width="240" alt="Estimated 1RM chart and session table for back squat"> | <img src="docs/screenshots/workout-dark.png" width="240" alt="Logging a Romanian deadlift set in the dark theme"> | <img src="docs/screenshots/train.png" width="240" alt="Train tab with saved routines and recent days"> |
+
+On a desktop the exercise list sits beside the workout, and exercises can be dragged in:
+
+<img src="docs/screenshots/desktop.png" width="720" alt="Desktop layout with sidebar navigation, workout and exercise list">
 
 ## Quick start
 
