@@ -8,8 +8,10 @@ from fastapi.testclient import TestClient
 
 def make_client(tmp_path, monkeypatch, password="", personal=""):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("REPLEDGER_PASSWORD", password)
-    monkeypatch.setenv("REPLEDGER_PERSONAL", personal)
+    monkeypatch.setenv("MICROLOAD_PASSWORD", password)
+    monkeypatch.setenv("MICROLOAD_PERSONAL", personal)
+    for old in ("REPLEDGER_PASSWORD", "REPLEDGER_PERSONAL", "REPLEDGER_USER"):
+        monkeypatch.delenv(old, raising=False)
     import server
     importlib.reload(server)
     return TestClient(server.app), server
@@ -67,8 +69,8 @@ def test_password_required_when_set(tmp_path, monkeypatch, path):
     r = client.get(path)
     assert r.status_code == 401
     assert "Basic" in r.headers["www-authenticate"]
-    assert client.get(path, headers=basic("repledger", "wrong")).status_code == 401
-    assert client.get(path, headers=basic("repledger", "s3cret")).status_code == 200
+    assert client.get(path, headers=basic("microload", "wrong")).status_code == 401
+    assert client.get(path, headers=basic("microload", "s3cret")).status_code == 200
 
 
 def test_health_is_open(tmp_path, monkeypatch):
@@ -81,3 +83,13 @@ def test_config_reports_personal_mode(tmp_path, monkeypatch):
     assert client.get("/api/config").json() == {"personal": False}
     client, _ = make_client(tmp_path, monkeypatch, personal="1")
     assert client.get("/api/config").json() == {"personal": True}
+
+
+def test_old_env_names_still_work(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    for k in ("MICROLOAD_PASSWORD", "MICROLOAD_PERSONAL"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("REPLEDGER_PERSONAL", "1")
+    import server
+    importlib.reload(server)
+    assert TestClient(server.app).get("/api/config").json() == {"personal": True}

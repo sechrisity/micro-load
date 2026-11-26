@@ -1,17 +1,17 @@
 services:
-  rep-ledger:
+  micro-load:
     build: .
-    image: rep-ledger:local
-    container_name: rep-ledger
+    image: micro-load:local
+    container_name: micro-load
     restart: unless-stopped
     ports:
       # Localhost only. Put a reverse proxy or a tailnet in front to reach it from your phone.
       - "127.0.0.1:8766:8766"
     environment:
-      REPLEDGER_PASSWORD: ${REPLEDGER_PASSWORD:-}
-      REPLEDGER_USER: ${REPLEDGER_USER:-repledger}
+      MICROLOAD_PASSWORD: ${MICROLOAD_PASSWORD:-}
+      MICROLOAD_USER: ${MICROLOAD_USER:-microload}
     volumes:
-      - rep-ledger-data:/data
+      - micro-load-data:/data
     read_only: true
     tmpfs:
       - /tmp
@@ -21,4 +21,4 @@ services:
       - no-new-privileges:true
 
 volumes:
-  rep-ledger-data:
+  micro-load-data:

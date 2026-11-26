@@ -1,4 +1,4 @@
-/* Rep Ledger training logic. Pure functions only: no DOM, no storage.
+/* Micro Load training logic. Pure functions only: no DOM, no storage.
  *
  * A set is { w, r, rir, q, done, warm, goal, goalAuto, why, note }.
  *   w  load (or distance for cardio, added load for bodyweight and timed work)
@@ -407,7 +407,7 @@
 
   const OLD_MEASURE = { lb: "total", "lb/side": "side", pin: "level" };
 
-  // Accepts this app's state or an export from the original single-user Rep Ledger.
+  // Accepts this app's state or an export from an earlier single-user version.
   function normalizeState(raw) {
     const s = emptyState();
     if (!raw || typeof raw !== "object") return s;

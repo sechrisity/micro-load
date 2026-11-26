@@ -1,4 +1,4 @@
-/* Rep Ledger built-in exercise library.
+/* Micro Load built-in exercise library.
  *
  * Each row: [name, muscle group, region, equipment, measure, pattern]
  *   region    upper | lower | core | full | cardio

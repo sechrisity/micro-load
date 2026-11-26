@@ -1,10 +1,10 @@
-# Rep Ledger
+# Micro Load
 
 A self-hosted workout logbook built around one habit: log every set against what you did last time, rate how well you did it, and pick one small step forward for next session.
 
-Rep Ledger runs as a single small container or as plain static files. It installs to your phone's home screen, works offline at the gym, and keeps your data on your own device or server.
+Micro Load runs as a single small container or as plain static files. It installs to your phone's home screen, works offline at the gym, and keeps your data on your own device or server.
 
-> Rep Ledger is a logbook, not medical advice. Read the [disclaimer](DISCLAIMER.md) before you use it.
+> Micro Load is a logbook, not medical advice. Read the [disclaimer](DISCLAIMER.md) before you use it.
 
 ## Contents
 
@@ -64,9 +64,9 @@ On a desktop the exercise list sits beside the workout, and exercises can be dra
 Requirements: Docker with Compose.
 
 ```bash
-git clone https://github.com/sechrisity/rep-ledger.git
-cd rep-ledger
-cp .env.example .env        # set REPLEDGER_PASSWORD
+git clone https://github.com/sechrisity/micro-load.git
+cd micro-load
+cp .env.example .env        # set MICROLOAD_PASSWORD
 docker compose up -d --build
 ```
 
@@ -86,11 +86,11 @@ All settings are environment variables. The container reads them from `.env` thr
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `REPLEDGER_PASSWORD` | empty | Enables HTTP Basic auth on every request when set. Leave empty only on a trusted private network |
-| `REPLEDGER_USER` | `repledger` | Basic auth username |
+| `MICROLOAD_PASSWORD` | empty | Enables HTTP Basic auth on every request when set. Leave empty only on a trusted private network |
+| `MICROLOAD_USER` | `microload` | Basic auth username |
 | `DATA_DIR` | `/data` | Where `state.json` and daily backups are written |
-| `REPLEDGER_BACKUPS` | `30` | Number of daily backups to keep |
-| `REPLEDGER_PERSONAL` | empty | Set to `1` for a single owner who runs it for themselves: skips the disclaimer and survey, hides the built-in library by default, and offers 3, 4 and 5 minute rest timers |
+| `MICROLOAD_BACKUPS` | `30` | Number of daily backups to keep |
+| `MICROLOAD_PERSONAL` | empty | Set to `1` for a single owner who runs it for themselves: skips the disclaimer and survey, hides the built-in library by default, and offers 3, 4 and 5 minute rest timers |
 
 Everything else (units, rest timer, theme, tips, routines, equipment) is set in the app under **Settings**.
 
@@ -100,14 +100,14 @@ Everything else (units, rest timer, theme, tips, routines, equipment) is set in 
 |---|---|---|
 | Docker on a home server | `docker compose up -d --build` | Listens on `127.0.0.1:8766` only. Recommended |
 | Private network | `tailscale serve --bg --https=8443 http://127.0.0.1:8766` | Reachable only from your tailnet, with HTTPS |
-| Reverse proxy | Caddy, nginx or Traefik in front of port 8766 | Use HTTPS and set `REPLEDGER_PASSWORD` |
+| Reverse proxy | Caddy, nginx or Traefik in front of port 8766 | Use HTTPS and set `MICROLOAD_PASSWORD` |
 | Static only | Serve the `static/` folder from any web server or GitHub Pages | No server sync. Data stays in that browser's storage, so export backups regularly |
 
 The app detects which mode it is in. If `api/state` answers, it syncs to the server. Otherwise it stores everything in the browser.
 
 ## Data and backups
 
-- Server mode stores the whole log as one JSON file, `state.json`, in the `rep-ledger-data` Docker volume.
+- Server mode stores the whole log as one JSON file, `state.json`, in the `micro-load-data` Docker volume.
 - Before the first save each day, the server copies the previous state to `backups/state-YYYY-MM-DD.json` and keeps the newest 30.
 - Each browser also keeps a local copy, so logging works without signal. The newer copy wins when the two meet again.
 - **Settings > Your data** exports a JSON backup or a CSV of every logged set, and imports a backup.
@@ -115,14 +115,14 @@ The app detects which mode it is in. If `api/state` answers, it syncs to the ser
 Copy the data out of the volume:
 
 ```bash
-docker compose cp rep-ledger:/data ./rep-ledger-backup
+docker compose cp micro-load:/data ./micro-load-backup
 ```
 
-Backups from the original single-user Rep Ledger can be imported. Their exercises come across as custom exercises.
+Backups from earlier single-user versions can be imported. Their exercises come across as custom exercises.
 
 ## Security
 
-- One instance holds one person's log. There are no accounts; anyone who can reach the app can read and change the data unless `REPLEDGER_PASSWORD` is set.
+- One instance holds one person's log. There are no accounts; anyone who can reach the app can read and change the data unless `MICROLOAD_PASSWORD` is set.
 - Compose binds to `127.0.0.1`. Expose it through HTTPS (reverse proxy or tailnet), never as plain HTTP on the internet.
 - The server sends a strict Content Security Policy (`script-src 'self'`, no inline scripts), `nosniff`, `frame-ancestors 'none'` and `no-referrer`.
 - The container runs as a non-root user with a read-only root filesystem, all capabilities dropped and `no-new-privileges`.
@@ -158,7 +158,7 @@ Rep ranges default from your top-priority goal and are wider for isolation work 
 
 ### Learning from your history
 
-The rules above are the starting point. Rep Ledger also records whether each goal landed: if last session asked for a microload, did you hit the new load at the same reps? Once an exercise has at least 3 attempts of a goal type in the last 6:
+The rules above are the starting point. Micro Load also records whether each goal landed: if last session asked for a microload, did you hit the new load at the same reps? Once an exercise has at least 3 attempts of a goal type in the last 6:
 
 | Your record on this exercise | What changes |
 |---|---|
@@ -215,13 +215,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Acknowledgements
 
-The training approach behind Rep Ledger was inspired by [@trainingbyjp](https://www.instagram.com/trainingbyjp/) on Instagram: track every set against last session, judge the quality of the work and not only the numbers, and earn each progression one small step at a time. If you lift, his content is worth your time. Rep Ledger is an independent project and is not affiliated with or endorsed by him.
+The training approach behind Micro Load was inspired by [@trainingbyjp](https://www.instagram.com/trainingbyjp/) on Instagram: track every set against last session, judge the quality of the work and not only the numbers, and earn each progression one small step at a time. If you lift, his content is worth your time. Micro Load is an independent project and is not affiliated with or endorsed by him.
 
 Drag and drop uses [SortableJS](https://github.com/SortableJS/Sortable). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Disclaimer
 
-Rep Ledger is not medical advice and does not replace a physician or qualified coach. Exercise carries a risk of injury. You train at your own risk, and the software is provided without warranty. The app requires every user to accept the full [disclaimer](DISCLAIMER.md) before first use.
+Micro Load is not medical advice and does not replace a physician or qualified coach. Exercise carries a risk of injury. You train at your own risk, and the software is provided without warranty. The app requires every user to accept the full [disclaimer](DISCLAIMER.md) before first use.
 
 ## License
 

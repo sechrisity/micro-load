@@ -1,6 +1,6 @@
 {
-  "name": "Rep Ledger",
-  "short_name": "Rep Ledger",
+  "name": "Micro Load",
+  "short_name": "Micro Load",
   "description": "Workout logbook: sets, reps, quality and a goal for next session.",
   "start_url": "./",
   "scope": "./",

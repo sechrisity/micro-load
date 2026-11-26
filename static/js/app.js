@@ -1,10 +1,10 @@
-/* Rep Ledger app: rendering, events and storage. Training rules live in logic.js. */
+/* Micro Load app: rendering, events and storage. Training rules live in logic.js. */
 (function () {
   "use strict";
   const RL = window.RL;
   const VERSION = "0.1.0";
   const CONSENT_VERSION = "1";
-  const LS = "repledger.state";
+  const LS = "repledger.state"; // storage key kept from the original name so existing data loads
   const PREFS = "repledger.prefs";
 
   /* ---------- helpers ---------- */
@@ -131,7 +131,7 @@
   /* ---------- legal text ---------- */
   const DISCLAIMER = `
     <h3>Not medical advice</h3>
-    <p>Rep Ledger is a workout logbook. It does not provide medical, health, nutrition or professional coaching advice, and using it does not create any professional relationship. Talk to a physician or qualified professional before starting or changing an exercise program, especially if you have a medical condition or injury, are pregnant, or are new to exercise.</p>
+    <p>Micro Load is a workout logbook. It does not provide medical, health, nutrition or professional coaching advice, and using it does not create any professional relationship. Talk to a physician or qualified professional before starting or changing an exercise program, especially if you have a medical condition or injury, are pregnant, or are new to exercise.</p>
     <h3>Exercise carries risk</h3>
     <p>Strength training and other exercise carry an inherent risk of injury, including serious injury or death. You choose your exercises, loads and volume. You are responsible for your own form, safety, equipment and training environment, including using spotters and safety equipment where appropriate. Stop immediately and seek medical help if you feel pain, dizziness, chest discomfort or unusual shortness of breath, or feel unwell.</p>
     <h3>Suggestions are generic</h3>
@@ -139,9 +139,9 @@
     <h3>No warranty, limited liability</h3>
     <p>The software is provided "as is", without warranty of any kind, as set out in the MIT License. To the maximum extent permitted by law, the authors and contributors are not liable for any injury, illness, loss, damage or claim arising from use of the software or reliance on anything it shows, including loss of data.</p>
     <h3>Your data</h3>
-    <p>Your training log, survey answers and notes stay in this browser or on the server you run Rep Ledger on. Nothing is sent to the authors. You are responsible for backups and for securing any server you expose.</p>
+    <p>Your training log, survey answers and notes stay in this browser or on the server you run Micro Load on. Nothing is sent to the authors. You are responsible for backups and for securing any server you expose.</p>
     <h3>No affiliation</h3>
-    <p>Rep Ledger is an independent open-source project. It is not affiliated with or endorsed by any coach, gym, equipment maker or brand it mentions.</p>`;
+    <p>Micro Load is an independent open-source project. It is not affiliated with or endorsed by any coach, gym, equipment maker or brand it mentions.</p>`;
 
   const READINESS = [
     "Has a doctor ever told you that you have a heart condition or high blood pressure?",
@@ -159,11 +159,11 @@
   /* ---------- onboarding: disclaimer gate ---------- */
   const agreeRow = (id, text) => `<label class="agree"><input type="checkbox" id="${id}"><span class="mark">${ic("check")}</span><span>${text}</span></label>`;
   function renderGate() {
-    $("#v-onboard").innerHTML = `<div class="step">Rep Ledger</div><h1>Before you start</h1>
-      <p class="lede">What Rep Ledger is, what it is not, and who is responsible for your training</p>
+    $("#v-onboard").innerHTML = `<div class="step">Micro Load</div><h1>Before you start</h1>
+      <p class="lede">What Micro Load is, what it is not, and who is responsible for your training</p>
       <div class="legal" tabindex="0" aria-label="Disclaimer">${DISCLAIMER}</div>
       <div class="sec"></div><div class="choices">
-        ${agreeRow("c-agree", "I have read and agree to this disclaimer and the MIT License. I use Rep Ledger at my own risk.")}
+        ${agreeRow("c-agree", "I have read and agree to this disclaimer and the MIT License. I use Micro Load at my own risk.")}
         ${agreeRow("c-age", "I am 18 or older, or I have permission from a parent or guardian and train under their supervision.")}</div>
       <div class="ctabar"><button class="btn primary" data-act="consent" id="consentBtn" disabled>Agree and continue</button></div>`;
   }
@@ -824,7 +824,7 @@
         <button class="row accent" data-act="export">Export backup</button><button class="row accent" data-act="csv">Export sets as CSV</button>
         <label class="row accent filebtn">Import backup<input type="file" id="importFile" accept="application/json,.json" hidden></label>
         <button class="row danger" data-act="wipe">Delete all data</button></div>`, serverMode ? "" : "Clearing this browser's site data deletes your log. Export a backup regularly")
-      + sec("About", `<div class="group"><div class="row"><span class="body credit">Inspired by <a href="https://www.instagram.com/trainingbyjp/" target="_blank" rel="noopener noreferrer">@trainingbyjp</a> and his approach to training: log every set against last time, judge how well you moved, and take one small step forward. Rep Ledger is independent and not affiliated with or endorsed by him.</span></div>
+      + sec("About", `<div class="group"><div class="row"><span class="body credit">Inspired by <a href="https://www.instagram.com/trainingbyjp/" target="_blank" rel="noopener noreferrer">@trainingbyjp</a> and his approach to training: log every set against last time, judge how well you moved, and take one small step forward. Micro Load is independent and not affiliated with or endorsed by him.</span></div>
         ${personal ? "" : rowBtn("legal", "", "Disclaimer", S.consent ? "Accepted " + esc(new Date(S.consent.acceptedAt).toLocaleDateString()) : "", "")}
         <div class="row"><span class="body"><span class="t">Version</span></span><span class="end">${VERSION}</span></div></div>`, "Free and open source under the MIT License")
       + `</div>`;
@@ -1082,8 +1082,8 @@
       case "setbuiltins": S.settings.builtins = b.dataset.v === "on"; refreshLib(); queue(); render(); break;
       case "tadj": timerEnd += +b.dataset.v * 1000; drawTimer(); break;
       case "tskip": stopTimer(); break;
-      case "export": download("rep-ledger-backup-" + today() + ".json", JSON.stringify(S, null, 2), "application/json"); break;
-      case "csv": download("rep-ledger-sets-" + today() + ".csv", RL.toCSV(S, exById, ctx()), "text/csv"); break;
+      case "export": download("micro-load-backup-" + today() + ".json", JSON.stringify(S, null, 2), "application/json"); break;
+      case "csv": download("micro-load-sets-" + today() + ".csv", RL.toCSV(S, exById, ctx()), "text/csv"); break;
       case "wipe": confirmBox("Delete all data?", "Every session, routine, custom exercise and survey answer will be deleted" + (serverMode ? " from this browser and the server" : "") + ". Export a backup first if you might want it back.", "wipe-yes", "Delete everything"); break;
       case "wipe-yes": S = RL.emptyState(); applyPersonal(); refreshLib(); stopTimer(); closeModal(); draft = null; view = "train"; queue(); render(); break;
       case "import-yes": {
@@ -1125,7 +1125,7 @@
       const reader = new FileReader();
       reader.onload = () => {
         let parsed;
-        try { parsed = RL.normalizeState(JSON.parse(reader.result)); } catch (err) { notice("Import failed", "That file is not a Rep Ledger backup"); return; }
+        try { parsed = RL.normalizeState(JSON.parse(reader.result)); } catch (err) { notice("Import failed", "That file is not a Micro Load backup"); return; }
         pendingImport = parsed;
         confirmBox("Replace all data?", `The backup has ${parsed.sessions.length} sessions, ${parsed.templates.length} routines and ${parsed.exercises.custom.length} custom exercises. Importing replaces everything currently stored.`, "import-yes", "Import");
       };

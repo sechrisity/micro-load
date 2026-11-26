@@ -7,13 +7,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
- && useradd --system --uid 10001 --no-create-home repledger \
- && mkdir /data && chown repledger /data
+ && useradd --system --uid 10001 --no-create-home microload \
+ && mkdir /data && chown microload /data
 
 COPY server.py .
 COPY static ./static
 
-USER repledger
+USER microload
 EXPOSE 8766
 VOLUME ["/data"]
 HEALTHCHECK --interval=60s --timeout=5s --start-period=10s \

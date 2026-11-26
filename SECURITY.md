@@ -12,6 +12,6 @@ Include the affected version, a description of the issue and steps to reproduce.
 
 ## Deployment guidance
 
-- Set `REPLEDGER_PASSWORD` whenever the app is reachable from anything other than your own trusted network.
+- Set `MICROLOAD_PASSWORD` whenever the app is reachable from anything other than your own trusted network.
 - Serve it over HTTPS through a reverse proxy or a private network. Never expose port 8766 directly to the internet.
 - Backups and `state.json` contain personal training and health data. Store them accordingly.

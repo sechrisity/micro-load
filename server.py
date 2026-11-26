@@ -1,6 +1,6 @@
-"""Rep Ledger server: serves the static app and stores the whole log as one JSON file.
+"""Micro Load server: serves the static app and stores the whole log as one JSON file.
 
-Single user per instance. Set REPLEDGER_PASSWORD to require HTTP Basic auth on every
+Single user per instance. Set MICROLOAD_PASSWORD to require HTTP Basic auth on every
 request; leave it unset only when the app is reachable from a trusted network alone.
 """
 import base64
@@ -16,15 +16,20 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+def env(name, default=""):
+    """MICROLOAD_<name>, falling back to the project's earlier REPLEDGER_<name>."""
+    return os.environ.get("MICROLOAD_" + name, os.environ.get("REPLEDGER_" + name, default))
+
+
 DATA = Path(os.environ.get("DATA_DIR", "/data"))
 STATE = DATA / "state.json"
 BACKUPS = DATA / "backups"
-KEEP_BACKUPS = int(os.environ.get("REPLEDGER_BACKUPS", "30"))
+KEEP_BACKUPS = int(env("BACKUPS", "30"))
 MAX_BODY = 20_000_000
-USER = os.environ.get("REPLEDGER_USER", "repledger")
-PASSWORD = os.environ.get("REPLEDGER_PASSWORD", "")
+USER = env("USER", "microload")
+PASSWORD = env("PASSWORD")
 # Personal mode: one known user, so no disclaimer gate, no survey and no built-in library by default.
-PERSONAL = os.environ.get("REPLEDGER_PERSONAL", "").lower() in ("1", "true", "yes")
+PERSONAL = env("PERSONAL").lower() in ("1", "true", "yes")
 
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
        "connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; "
@@ -59,7 +64,7 @@ def authorized(header: str) -> bool:
 async def guard(request: Request, call_next):
     if request.url.path != "/api/health" and not authorized(request.headers.get("authorization", "")):
         resp = Response("Authentication required", status_code=401,
-                        headers={"WWW-Authenticate": 'Basic realm="Rep Ledger", charset="UTF-8"'})
+                        headers={"WWW-Authenticate": 'Basic realm="Micro Load", charset="UTF-8"'})
     else:
         resp = await call_next(request)
     for k, v in HEADERS.items():

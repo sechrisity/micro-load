@@ -4,7 +4,7 @@ Thanks for helping. Issues and pull requests are welcome.
 
 ## Ground rules
 
-- Keep it small. Rep Ledger is plain HTML, CSS and JavaScript with no build step, and a single-file FastAPI server. New dependencies need a strong reason.
+- Keep it small. Micro Load is plain HTML, CSS and JavaScript with no build step, and a single-file FastAPI server. New dependencies need a strong reason.
 - Keep it private. No analytics, tracking, external fonts or CDNs.
 - Keep it safe. Training suggestions stay conservative and are always overridable. Do not add features that present the app as medical or coaching advice.
 
@@ -18,7 +18,7 @@ Thanks for helping. Issues and pull requests are welcome.
    pip install -r requirements-dev.txt
    pytest -q
    node --test tests/*.test.js
-   docker build -t rep-ledger:dev .
+   docker build -t micro-load:dev .
    ```
 
 4. If you changed any app shell file, bump the cache name in `static/sw.js`.

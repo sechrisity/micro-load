@@ -36,7 +36,7 @@ Relative measures travel better between people of different size, age and experi
 |---|---|---|
 | Share card | Export a small image or link with chosen stats | No server, no accounts, no live updates |
 | Friend file | Each friend exports a signed summary file; the app shows them side by side | Private and offline, manual to refresh |
-| Hosted groups | Opt-in groups on a hosted Rep Ledger server | Live leaderboards, but needs accounts, a privacy policy and moderation |
+| Hosted groups | Opt-in groups on a hosted Micro Load server | Live leaderboards, but needs accounts, a privacy policy and moderation |
 
 Start with the share card. Move to hosted groups only if people ask for them.
 

@@ -4,7 +4,7 @@ Every user must accept this disclaimer in the app before first use. It is versio
 
 ## Not medical advice
 
-Rep Ledger is a workout logbook. It does not provide medical, health, nutrition or professional coaching advice, and using it does not create any professional relationship. Talk to a physician or qualified professional before starting or changing an exercise program, especially if you have a medical condition or injury, are pregnant, or are new to exercise.
+Micro Load is a workout logbook. It does not provide medical, health, nutrition or professional coaching advice, and using it does not create any professional relationship. Talk to a physician or qualified professional before starting or changing an exercise program, especially if you have a medical condition or injury, are pregnant, or are new to exercise.
 
 ## Exercise carries risk
 
@@ -24,7 +24,7 @@ The software is provided "as is", without warranty of any kind, as set out in th
 
 ## Your data
 
-Your training log, survey answers and notes stay in your browser or on the server you run Rep Ledger on. Nothing is sent to the authors. You are responsible for backups and for securing any server you expose.
+Your training log, survey answers and notes stay in your browser or on the server you run Micro Load on. Nothing is sent to the authors. You are responsible for backups and for securing any server you expose.
 
 ## Age
 
@@ -32,8 +32,8 @@ Users must be 18 or older, or have permission from a parent or guardian and trai
 
 ## No affiliation
 
-Rep Ledger is an independent open-source project. It is not affiliated with or endorsed by any coach, gym, equipment maker or brand it mentions.
+Micro Load is an independent open-source project. It is not affiliated with or endorsed by any coach, gym, equipment maker or brand it mentions.
 
 ## Operators
 
-If you host Rep Ledger for other people, you are responsible for your own terms of use, privacy notice and compliance with the laws that apply to you and your users.
+If you host Micro Load for other people, you are responsible for your own terms of use, privacy notice and compliance with the laws that apply to you and your users.

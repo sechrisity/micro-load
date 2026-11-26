@@ -20,7 +20,7 @@
 
 ## Objective
 
-Let a user record a set on their phone and have Rep Ledger detect form breakdown across the set, then use that to decide whether to progress the next set or next session.
+Let a user record a set on their phone and have Micro Load detect form breakdown across the set, then use that to decide whether to progress the next set or next session.
 
 ## Core idea
 
@@ -74,7 +74,7 @@ Validation and calibration data, not training data. The pose model is already tr
 |---|---|---|
 | Side-view recordings of real sets | A few dozen sets per exercise to start | Own training |
 | Per-rep label | Clean or broke down, marked by the lifter or a coach watching the replay | Labelled in the app after the set |
-| Per-set label | RIR and quality, as logged today | Rep Ledger |
+| Per-set label | RIR and quality, as logged today | Micro Load |
 | Varied lifters | Later, to check the approach generalises | Volunteers who opt in |
 
 The per-rep labels are what tune each user's tolerances. Experienced lifters label more precisely, so the app should let a coach review and relabel.

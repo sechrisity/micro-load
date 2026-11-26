@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-Rep Ledger bundles the following third-party software.
+Micro Load bundles the following third-party software.
 
 ## SortableJS 1.15.2
 
