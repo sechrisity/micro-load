@@ -17,12 +17,29 @@
   const fw = RL.fw;
   const num = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Number(v));
   const label = (list, k) => (list.find(([key]) => key === k) || [k, k])[1];
+  // Line icons, one set, drawn for this app.
+  const ICONS = {
+    plus: '<path d="M12 5.5v13M5.5 12h13"/>', minus: '<path d="M5.5 12h13"/>', check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    x: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>', chev: '<path d="M9.5 6l6 6-6 6"/>', chevleft: '<path d="M14.5 6l-6 6 6 6"/>',
+    chevdown: '<path d="M6 9.5l6 6 6-6"/>', up: '<path d="M12 18.5v-13M6.5 11l5.5-5.5 5.5 5.5"/>', down: '<path d="M12 5.5v13M6.5 13l5.5 5.5 5.5-5.5"/>',
+    grip: '<circle cx="9" cy="7" r=".8"/><circle cx="15" cy="7" r=".8"/><circle cx="9" cy="12" r=".8"/><circle cx="15" cy="12" r=".8"/><circle cx="9" cy="17" r=".8"/><circle cx="15" cy="17" r=".8"/>',
+    trash: '<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>', trophy: '<path d="M8 4.5h8v4.5a4 4 0 0 1-8 0V4.5zM8 6.5H5.5a2.5 2.5 0 0 0 2.6 3.4M16 6.5h2.5a2.5 2.5 0 0 1-2.6 3.4M12 13v3.5M8.5 19.5h7"/>',
+  };
+  const ic = (n, cls) => `<svg class="i ${cls || ""}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
+  let toastTimer = null;
+  function toast(t) {
+    const el = $("#toast");
+    el.innerHTML = `<div class="toast">${esc(t)}</div>`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.innerHTML = ""; }, 2600);
+  }
 
   /* ---------- state ---------- */
   let S = RL.emptyState();
   let LIB = [], ALL = [], SORTED = []; // SORTED: alphabetical, for display. LIB order is the routine builder's preference order.
   let view = "train", selEx = null, exQuery = "", openBd = {}, loaded = false, serverMode = false;
   let draft = null, step = 0, pickAt = null, pickRegion = "all";
+  let exOpen = false, openGoal = {}, openNote = {}, syncText = "";
   let prefs = { rack: "all", mine: true };
   try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS) || "{}")); } catch (e) { /* defaults */ }
   const savePrefs = () => { try { localStorage.setItem(PREFS, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
@@ -58,7 +75,13 @@
     }
     flushing = false;
   }
-  function setSync(t) { $("#sync").textContent = t; }
+  // Sync state is shown in Settings. Only problems surface as a toast.
+  function setSync(t) {
+    const changed = t !== syncText;
+    syncText = t;
+    const el = $("#syncText"); if (el) el.textContent = t;
+    if (changed && /^(Offline|Not saved)/.test(t)) toast(t);
+  }
 
   async function connect() {
     let localD = null;
@@ -123,15 +146,15 @@
   const DAYS = [["2", "2 days"], ["3", "3 days"], ["4", "4 days"], ["5", "5 days"], ["6", "6 days"]];
 
   /* ---------- onboarding: disclaimer gate ---------- */
+  const agreeRow = (id, text) => `<label class="agree"><input type="checkbox" id="${id}"><span class="mark">${ic("check")}</span><span>${text}</span></label>`;
   function renderGate() {
-    $("#v-onboard").innerHTML = `<div class="panel">
-      <h1>Before you start</h1>
-      <p>Please read this. It covers what Rep Ledger is, what it is not, and who is responsible for your training.</p>
+    $("#v-onboard").innerHTML = `<div class="step">Rep Ledger</div><h1>Before you start</h1>
+      <p class="lede">What Rep Ledger is, what it is not, and who is responsible for your training</p>
       <div class="legal" tabindex="0" aria-label="Disclaimer">${DISCLAIMER}</div>
-      <label class="check"><input type="checkbox" id="c-agree"><span>I have read and agree to this disclaimer and the MIT License. I use Rep Ledger at my own risk.</span></label>
-      <label class="check"><input type="checkbox" id="c-age"><span>I am 18 or older, or I have permission from a parent or guardian and train under their supervision.</span></label>
-      <div class="btnrow end"><button class="btn primary" data-act="consent" id="consentBtn" disabled>Agree and continue</button></div>
-    </div>`;
+      <div class="sec"></div><div class="choices">
+        ${agreeRow("c-agree", "I have read and agree to this disclaimer and the MIT License. I use Rep Ledger at my own risk.")}
+        ${agreeRow("c-age", "I am 18 or older, or I have permission from a parent or guardian and train under their supervision.")}</div>
+      <div class="ctabar"><button class="btn primary" data-act="consent" id="consentBtn" disabled>Agree and continue</button></div>`;
   }
 
   /* ---------- onboarding: survey ---------- */
@@ -147,63 +170,61 @@
     view = "onboard";
     render();
   }
-  const radios = (name, list, cur) => `<div class="opts">${list.map(([k, l, d]) => `<label class="opt"><input type="radio" name="${name}" value="${esc(k)}" ${cur === k ? "checked" : ""}><span><b>${esc(l)}</b>${d ? `<small>${esc(d)}</small>` : ""}</span></label>`).join("")}</div>`;
-
-  const checks = (name, list, cur) => `<div class="opts">${list.map(([k, l, d]) => `<label class="opt"><input type="checkbox" name="${name}" value="${esc(k)}" ${cur.includes(k) ? "checked" : ""}><span><b>${esc(l)}</b>${d ? `<small>${esc(d)}</small>` : ""}</span></label>`).join("")}</div>`;
-  const goalOrderHTML = (goals) => goals.length < 2 ? "" : `<div class="q-block"><b class="small">Priority order</b><ol class="rank">${goals.map((g, i) => `<li><span class="nm">${esc(label(GOALS, g))}</span>
-    <button class="iconbtn" data-act="gup" data-i="${i}" ${i === 0 ? "disabled" : ""} aria-label="Move ${esc(label(GOALS, g))} up">&uarr;</button>
-    <button class="iconbtn" data-act="gdown" data-i="${i}" ${i === goals.length - 1 ? "disabled" : ""} aria-label="Move ${esc(label(GOALS, g))} down">&darr;</button></li>`).join("")}</ol></div>`;
+  const choiceList = (type, name, list, isOn) => `<div class="choices">${list.map(([k, l, d]) => `<label class="choice"><input type="${type}" name="${name}" value="${esc(k)}" ${isOn(k) ? "checked" : ""}><span class="body"><b>${esc(l)}</b>${d ? `<small>${esc(d)}</small>` : ""}</span><span class="mark">${ic("check")}</span></label>`).join("")}</div>`;
+  const radios = (name, list, cur) => choiceList("radio", name, list, (k) => cur === k);
+  const checks = (name, list, cur) => choiceList("checkbox", name, list, (k) => cur.includes(k));
+  const goalOrderHTML = (goals) => goals.length < 2 ? "" : `<ol class="rank" aria-label="Goal priority">${goals.map((g, i) => `<li><span class="num">${i + 1}</span><span class="nm">${esc(label(GOALS, g))}</span>
+    <button class="iconbtn" data-act="gup" data-i="${i}" ${i === 0 ? "disabled" : ""} aria-label="Move ${esc(label(GOALS, g))} up">${ic("up")}</button>
+    <button class="iconbtn" data-act="gdown" data-i="${i}" ${i === goals.length - 1 ? "disabled" : ""} aria-label="Move ${esc(label(GOALS, g))} down">${ic("down")}</button></li>`).join("")}</ol>`;
 
   function renderSurvey() {
     const d = draft, n = 5;
-    const bar = `<div class="steps" aria-hidden="true">${Array.from({ length: n }, (_, i) => `<span class="${i <= step ? "on" : ""}"></span>`).join("")}</div>`;
+    const bar = `<div class="progress" aria-hidden="true">${Array.from({ length: n }, (_, i) => `<span class="${i <= step ? "on" : ""}"></span>`).join("")}</div><div class="step">Step ${step + 1} of ${n}</div>`;
     let body = "";
     if (step === 0) {
-      body = `<h2>About you</h2><p class="muted">This sets your starting rep ranges and how much help the app shows. You can change everything later.</p>
-        <fieldset class="q-block"><legend>How long have you been training?</legend>${radios("experience", EXPERIENCE, d.experience)}</fieldset>
-        <fieldset class="q-block"><legend>What are your main goals?</legend><p class="help">Pick one or more, then put them in order. Your top goal sets your rep ranges.</p>${checks("goals", GOALS, d.goals)}</fieldset>
+      body = `<h1>About you</h1><p class="lede">Sets your starting rep ranges and how much help you see. You can change all of it later.</p>
+        <fieldset><legend>How long have you been training?</legend>${radios("experience", EXPERIENCE, d.experience)}</fieldset>
+        <fieldset><legend>What are your goals?</legend><p class="help">Pick one or more, then put them in order. Your top goal sets your rep ranges.</p>${checks("goals", GOALS, d.goals)}</fieldset>
         <div id="goalOrder">${goalOrderHTML(d.goals)}</div>`;
     } else if (step === 1) {
-      body = `<h2>Where you train</h2><p class="muted">The exercise rack shows what you can do with your equipment. Bodyweight exercises are always included.</p>
-        <fieldset class="q-block"><legend>Where do you train?</legend><p class="help">Pick every place you train.</p>${checks("environments", RL.ENVIRONMENTS.map(([k, l]) => [k, l]), d.environments)}</fieldset>
-        <fieldset class="q-block"><legend>Equipment you have access to</legend><p class="help">Your places fill this in. Adjust it to match what you actually have.</p>
-        <div class="opts">${RL.EQUIPMENT.filter(([k]) => k !== "bodyweight").map(([k, l]) => `<label class="opt"><input type="checkbox" name="equipment" value="${k}" ${d.equipment.includes(k) ? "checked" : ""}><span><b>${esc(l)}</b></span></label>`).join("")}</div></fieldset>`;
+      body = `<h1>Where you train</h1><p class="lede">The exercise list shows what your equipment allows. Bodyweight exercises are always included.</p>
+        <fieldset><legend>Places</legend><p class="help">Pick every place you train</p>${checks("environments", RL.ENVIRONMENTS.map(([k, l]) => [k, l]), d.environments)}</fieldset>
+        <fieldset><legend>Equipment</legend><p class="help">Filled in from your places. Adjust it to match what you actually have.</p>${checks("equipment", RL.EQUIPMENT.filter(([k]) => k !== "bodyweight"), d.equipment)}</fieldset>`;
     } else if (step === 2) {
-      body = `<h2>Schedule and units</h2>
-        <fieldset class="q-block"><legend>How many days a week do you plan to train?</legend>${radios("days", DAYS, String(d.days))}</fieldset>
-        <fieldset class="q-block"><legend>Weight unit</legend>${radios("unit", [["lb", "Pounds (lb)"], ["kg", "Kilograms (kg)"]], d.unit)}</fieldset>
-        <fieldset class="q-block"><legend>Distance unit</legend>${radios("dist", [["km", "Kilometres (km)"], ["mi", "Miles (mi)"]], d.dist)}</fieldset>`;
+      body = `<h1>Schedule and units</h1>
+        <fieldset><legend>Training days per week</legend>${radios("days", DAYS, String(d.days))}</fieldset>
+        <fieldset><legend>Weight</legend>${radios("unit", [["lb", "Pounds", "lb"], ["kg", "Kilograms", "kg"]], d.unit)}</fieldset>
+        <fieldset><legend>Distance</legend>${radios("dist", [["km", "Kilometres", "km"], ["mi", "Miles", "mi"]], d.dist)}</fieldset>`;
     } else if (step === 3) {
       const anyYes = d.readiness.some((x) => x === "yes");
-      body = `<h2>Health check</h2><p class="muted">These questions follow common pre-exercise screening practice. They are not a medical assessment, and your answers stay in your Rep Ledger data.</p>
-        <div>${READINESS.map((q, i) => `<div class="yn"><span>${esc(q)}</span><span class="ch" role="radiogroup" aria-label="${esc(q)}">
+      body = `<h1>Health check</h1><p class="lede">Based on common pre-exercise screening. Not a medical assessment. Your answers stay in your own data.</p>
+        <fieldset><div class="choices">${READINESS.map((q, i) => `<div class="yn" role="radiogroup" aria-label="${esc(q)}"><span>${esc(q)}</span><span class="seg">
           <label><input type="radio" name="rq${i}" value="yes" ${d.readiness[i] === "yes" ? "checked" : ""}>Yes</label>
-          <label><input type="radio" name="rq${i}" value="no" ${d.readiness[i] === "no" ? "checked" : ""}>No</label></span></div>`).join("")}</div>
+          <label><input type="radio" name="rq${i}" value="no" ${d.readiness[i] === "no" ? "checked" : ""}>No</label></span></div>`).join("")}</div></fieldset>
         <div id="clearBox">${anyYes ? clearanceHTML(d.cleared) : ""}</div>
-        <fieldset class="q-block"><legend>Injuries or limitations (optional)</legend><p class="help">A private note for yourself, shown on the Settings page. The app does not change your plan based on it.</p>
+        <fieldset><legend>Injuries or limitations</legend><p class="help">Optional. A private note shown in Settings. The app does not change your plan based on it.</p>
         <textarea class="field" name="limitations" rows="2" maxlength="500">${esc(d.limitations)}</textarea></fieldset>`;
     } else {
       const tmpl = RL.buildTemplates(LIB, Object.assign({}, d, { goal: d.goals[0] }));
       const rng = (g) => RL.RANGES[g] || RL.RANGES.muscle;
-      body = `<h2>Your setup</h2>
-        <dl class="kv">
+      body = `<h1>Your setup</h1><p class="lede">A starting point, not a prescription. Swap anything.</p>
+        <div class="summary"><dl class="kv">
           <dt>Experience</dt><dd>${esc(label(EXPERIENCE, d.experience))}</dd>
           <dt>Goals</dt><dd>${d.goals.map((g, i) => (i + 1) + ". " + esc(label(GOALS, g))).join("<br>")}</dd>
+          <dt>Rep ranges</dt><dd><span class="fig">${rng(d.goals[0])[0].join("-")}</span> compound, <span class="fig">${rng(d.goals[0])[1].join("-")}</span> isolation</dd>
           <dt>Places</dt><dd>${d.environments.map((k) => esc(label(RL.ENVIRONMENTS, k))).join(", ")}</dd>
-          <dt>Rep ranges</dt><dd>${rng(d.goals[0])[0].join("-")} on compound lifts, ${rng(d.goals[0])[1].join("-")} on isolation work</dd>
-          <dt>Equipment</dt><dd>${d.equipment.length ? d.equipment.map((k) => esc(label(RL.EQUIPMENT, k))).join(", ") : "Bodyweight only"}</dd>
-          <dt>Exercises available</dt><dd>${LIB.filter((e) => new Set([...d.equipment, "bodyweight"]).has(e.equip)).length} of ${LIB.length}</dd>
-          <dt>Starter routines</dt><dd>${tmpl.map((t) => esc(t.name)).join(", ") || "None"}</dd>
-        </dl>
-        ${S.profile ? `<label class="check"><input type="checkbox" name="rebuild" ${d.rebuild ? "checked" : ""}><span>Replace my starter routines with these. Routines I saved myself are kept.</span></label>` : ""}
-        <p class="muted small">Starter routines are a sensible place to begin, not a prescription. Swap exercises freely.</p>`;
+          <dt>Exercises</dt><dd>${LIB.filter((e) => new Set([...d.equipment, "bodyweight"]).has(e.equip)).length} of ${LIB.length} match your equipment</dd>
+          <dt>Routines</dt><dd>${tmpl.map((t) => esc(t.name)).join(", ") || "None"}</dd>
+        </dl></div>
+        ${S.profile ? `<div class="sec"></div><div class="choices"><label class="agree"><input type="checkbox" name="rebuild" ${d.rebuild ? "checked" : ""}><span class="mark">${ic("check")}</span><span>Replace my starter routines. Routines I saved myself are kept.</span></label></div>` : ""}`;
     }
-    $("#v-onboard").innerHTML = `<div class="panel">${bar}${body}<div class="err" id="surveyErr" role="alert"></div>
-      <div class="btnrow end">${step > 0 ? `<button class="btn" data-act="sback">Back</button>` : S.profile ? `<button class="btn" data-act="scancel">Cancel</button>` : ""}
-      <button class="btn primary" data-act="snext">${step === n - 1 ? (S.profile ? "Save" : "Start training") : "Next"}</button></div></div>`;
+    $("#v-onboard").innerHTML = `${bar}${body}<div class="sec"></div><div class="err" id="surveyErr" role="alert"></div>
+      <div class="ctabar">${step > 0 ? `<button class="btn back" data-act="sback">Back</button>` : S.profile ? `<button class="btn back" data-act="scancel">Cancel</button>` : ""}
+      <button class="btn primary" data-act="snext">${step === n - 1 ? (S.profile ? "Save" : "Start training") : "Continue"}</button></div>`;
   }
-  const clearanceHTML = (on) => `<div class="notice bad">You answered yes to at least one question. Get clearance from a physician or qualified professional before you start, and tell them what kind of training you plan to do.</div>
-    <label class="check"><input type="checkbox" name="cleared" ${on ? "checked" : ""}><span>I have clearance, or I will get it before training.</span></label>`;
+  const clearanceHTML = (on) => `<div class="callout bad">You answered yes to at least one question. Get clearance from a physician or qualified professional before you start, and tell them what kind of training you plan to do.</div>
+    <div class="choices"><label class="agree"><input type="checkbox" name="cleared" ${on ? "checked" : ""}><span class="mark">${ic("check")}</span><span>I have clearance, or I will get it before training</span></label></div>`;
+
 
   function collectStep() {
     const f = $("#v-onboard");
@@ -322,16 +343,17 @@
     .map(([k, l]) => `<button class="chip ${cur === k ? "on" : ""}" data-act="${act}" data-v="${k}">${l}</button>`).join("");
 
   /* ---------- render ---------- */
+  const wide = () => window.matchMedia("(min-width: 900px)").matches;
   function render() {
     const onboarding = !S.consent || S.consent.version !== CONSENT_VERSION || !S.profile || view === "onboard";
-    $("#tabs").hidden = onboarding; $("#meta").hidden = onboarding; $("#foot").hidden = onboarding;
+    $("#tabs").hidden = onboarding;
     ["onboard", "train", "history", "exercises", "settings"].forEach((v) => { $("#v-" + v).hidden = onboarding ? v !== "onboard" : v !== view; });
     if (onboarding) {
       if (!S.consent || S.consent.version !== CONSENT_VERSION) return renderGate();
       if (!draft) { startSurvey(); return; }
       return renderSurvey();
     }
-    document.querySelectorAll("nav.tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.v === view)));
+    document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.v === view)));
     $("#labels").innerHTML = [...new Set(S.sessions.map((s) => s.label).filter(Boolean))].map((l) => `<option value="${esc(l)}">`).join("");
     $("#groups").innerHTML = RL.GROUPS.map((g) => `<option value="${esc(g)}">`).join("");
     if (view === "train") renderTrain();
@@ -339,61 +361,68 @@
     else if (view === "exercises") renderExercises();
     else renderSettings();
   }
+  const plural = (n, w) => n + " " + w + (n === 1 ? "" : "s");
+  const fig = (w, r, ex) => `${fw(w)} × ${r ?? "-"}`;
+  const navHTML = (title, sub, acts) => `<header class="nav"><h1>${title}${sub ? `<span class="sub">${sub}</span>` : ""}</h1>${acts ? `<div class="acts">${acts}</div>` : ""}</header>`;
+  const rowBtn = (act, attrs, t, d, end) => `<button class="row" data-act="${act}" ${attrs || ""}><span class="body"><span class="t">${t}</span>${d ? `<span class="d">${d}</span>` : ""}</span><span class="end">${end || ""}${ic("chev", "sm chev")}</span></button>`;
 
   function renderLib() {
+    const lib = $("#lib"); if (!lib) return;
     const q = ($("#libSearch").value || "").toLowerCase().trim();
     const s = active(), inS = new Set(s ? s.items.map((i) => i.exId) : []);
     $("#rackf").innerHTML = regionChips(prefs.rack, "rackf") + `<button class="chip ${prefs.mine ? "on" : ""}" data-act="mine" aria-pressed="${prefs.mine}">My equipment</button>`;
-    const list = SORTED.filter((e) => rackMatch(e, prefs.rack, prefs.mine, q));
-    $("#lib").innerHTML = list.map((e) => `<li data-ex="${esc(e.id)}" class="${inS.has(e.id) ? "in-session" : ""}"><div class="nm">${esc(e.name)}<div class="grp">${esc(e.group)} · ${esc(rangeText(e))} · ${esc(RL.wUnit(e, ctx()))}</div></div><button class="add" data-act="add" data-ex="${esc(e.id)}" aria-label="Add ${esc(e.name)}">+</button></li>`).join("")
-      || `<li class="muted">No match. Use "+ Add exercise" to create it.</li>`;
+    lib.innerHTML = SORTED.filter((e) => rackMatch(e, prefs.rack, prefs.mine, q)).map((e) => `<li data-ex="${esc(e.id)}" class="${inS.has(e.id) ? "in-session" : ""}"><div class="nm">${esc(e.name)}<div class="grp">${esc(e.group)} · ${esc(label(RL.EQUIPMENT, e.equip).replace(/ \(.*\)/, ""))}</div></div><button class="iconbtn add" data-act="add" data-ex="${esc(e.id)}" aria-label="Add ${esc(e.name)}">${ic("plus")}</button></li>`).join("")
+      || `<li class="muted">No match</li>`;
   }
-
-  function renderTips() {
-    $("#tips").innerHTML = S.settings.tips ? `<div class="tips"><b>How Rep Ledger works</b><ul>
-      <li>Add exercises in the order you'll train them. Each one loads your sets from last time with a goal for today.</li>
-      <li>Enter load and reps, then tap <b>Log set</b>. Mark warm-ups with <b>W</b> so they don't count toward progress.</li>
-      <li><b>RIR</b> (reps in reserve) is how many more clean reps you could have done. 0 means none left.</li>
-      <li><b>Quality</b> 1-10 rates how well you executed the set: form, control, range of motion.</li>
-      <li>After each set you get a suggested goal for next session. Accept it or pick your own.</li>
-      <li>Stop any set that causes pain. Progress is never worth an injury.</li></ul>
-      <div class="btnrow"><button class="btn sm" data-act="hidetips">Got it, hide tips</button></div></div>` : "";
-  }
+  const tipsHTML = () => S.settings.tips ? `<div class="tips"><b class="h">How it works</b><ul>
+      <li>Each exercise loads last session's sets, with today's goal under <b>Previous</b>.</li>
+      <li>Enter load and reps, then tap the check. Tap the set number to mark a warm-up.</li>
+      <li>Rate <b>RIR</b> (clean reps left) and <b>Quality</b> (how well you moved) after each set.</li>
+      <li>You get a goal for next time and advice for your next set. Override either.</li>
+      <li>Stop any set that hurts. No progression is worth an injury.</li></ul>
+      <button class="txtbtn" data-act="hidetips">Hide tips</button></div>` : "";
 
   function renderTrain() {
-    renderLib();
-    renderTips();
     const s = active();
+    const rack = `<aside class="rack"><input type="search" class="search" id="libSearch" placeholder="Search" aria-label="Search exercises"><div class="chips" id="rackf"></div><ul class="lib" id="lib"></ul></aside>`;
+    let main;
     if (!s) {
       const seen = new Set();
       const recent = doneSessions().filter((r) => { const k = (r.label || "").toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 4);
-      $("#sessHead").innerHTML = `<h2>Today</h2><span class="date">${fmtDate(today())}</span>`;
-      $("#slots").innerHTML = `<li class="drop" data-static><b>No session running</b>Start a routine, repeat a past day, or drop an exercise here. Goals from the last time you did each exercise load in automatically.
-        ${S.templates.length ? `<div class="row">${S.templates.map((t) => `<button class="btn primary" data-act="tstart" data-id="${esc(t.id)}">Start ${esc(t.name)}</button>`).join("")}</div>` : ""}
-        <div class="row">${recent.map((r) => `<button class="btn" data-act="repeat" data-id="${esc(r.id)}">Repeat ${esc(r.label || "session")} · ${fmtDate(r.date)}</button>`).join("")}<button class="btn" data-act="start">Start empty session</button></div></li>`;
-      return;
+      main = navHTML("Train", fmtDate(today())) + tipsHTML()
+        + (S.templates.length ? `<div class="sec">Routines</div><div class="group">${S.templates.map((t) => rowBtn("tstart", `data-id="${esc(t.id)}"`, esc(t.name), esc(t.exIds.slice(0, 3).map((id) => exById(id).name).join(", ") + (t.exIds.length > 3 ? " and " + (t.exIds.length - 3) + " more" : "")), "")).join("")}</div>` : "")
+        + (recent.length ? `<div class="sec">Repeat a recent day</div><div class="group">${recent.map((r) => rowBtn("repeat", `data-id="${esc(r.id)}"`, esc(r.label || "Session"), fmtDate(r.date) + " · " + plural(r.items.length, "exercise"), "")).join("")}</div>` : "")
+        + `<div class="sec"></div><button class="btn primary block" data-act="start">Start empty workout</button>
+        <ol class="slots" id="slots"><li class="empty-card rack-hint" data-static><b>Or drag from the list</b>Drop an exercise here to start</li></ol>`;
+    } else {
+      const ins = (i) => `<li class="insert" data-static><button data-act="picker" data-at="${i}" aria-label="Insert an exercise at position ${i + 1}">${ic("plus")}Insert</button></li>`;
+      main = `<header class="nav"><div class="ttl"><input class="session-title" id="sessLabel" list="labels" value="${esc(s.label)}" placeholder="Workout" aria-label="Workout name"><span class="sub">${fmtDate(s.date)}</span></div>
+        <div class="acts"><button class="btn primary sm" data-act="finish">Finish</button></div></header>` + tipsHTML()
+        + `<ol class="slots" id="slots">${s.items.map((it, i) => (i ? ins(i) : "") + cardHTML(s, it, i)).join("")}
+          ${s.items.length ? "" : `<li class="empty-card" data-static><b>Add your first exercise</b>Use the button below${wide() ? " or drag from the list" : ""}</li>`}
+          <li class="addrow" data-static><button class="btn tint block" data-act="picker">${ic("plus")}Add exercise</button></li></ol>
+        <div class="session-foot"><button class="txtbtn" data-act="saveroutine">Save as routine</button><button class="txtbtn danger" data-act="discard">Discard workout</button></div>`;
     }
-    $("#sessHead").innerHTML = `<input class="label" id="sessLabel" list="labels" value="${esc(s.label)}" placeholder="Session name" aria-label="Session name"><span class="date">${fmtDate(s.date)}</span>
-      <div class="acts"><button class="btn sm" data-act="saveroutine">Save as routine</button><button class="btn danger sm" data-act="discard">Discard</button><button class="btn dark" data-act="finish">Finish session</button></div>`;
-    const ins = (i) => `<li class="insert" data-static><button data-act="picker" data-at="${i}" aria-label="Insert an exercise at position ${i + 1}">+ Insert exercise</button></li>`;
-    $("#slots").innerHTML = (s.items.length ? s.items.map((it, i) => ins(i) + cardHTML(s, it, i)).join("")
-      : `<li class="drop" data-static><b>Add your first exercise</b>Drag from the rack or tap the button below.</li>`)
-      + `<li class="addrow" data-static><button class="btn addex" data-act="picker">+ Add exercise</button></li>`;
+    $("#v-train").innerHTML = `<div class="train has-rack"><div class="trainmain">${main}</div>${rack}</div>`;
+    renderLib();
+    initDnD();
   }
 
   function cardHTML(s, it, i) {
     const ex = exById(it.exId), c0 = ctx(), last = lastFor(it.exId, null, s.id), prior = earlierSets(it.exId, null, s.id);
-    const lastTxt = last
-      ? "Last · " + fmtDate(last.s.date) + ": " + last.it.sets.map((x) => `<b>${fw(x.w)}×${x.r ?? "-"}</b>${x.rir != null ? " @" + x.rir : ""}${x.q != null ? " (" + x.q + "/10)" : ""}`).join(" · ")
-      : "First time logging this exercise. Today sets your baseline.";
     const wi = workIndex(it.sets);
+    const plateAt = it.sets.findIndex((x) => !x.done);
+    const exNote = it.note || openNote["ex:" + it.uid];
     return `<li class="card" data-uid="${it.uid}">
-      <div class="card-h"><span class="handle" title="Drag to reorder" aria-hidden="true">⋮⋮</span><span class="slotno">${i + 1}</span><div class="nm">${esc(ex.name)}</div><span class="sub">${esc(rangeText(ex))}</span><button class="iconbtn" data-act="rmitem" data-i="${i}" aria-label="Remove ${esc(ex.name)}">×</button></div>
+      <div class="card-h"><span class="handle" title="Drag to reorder" aria-hidden="true">${ic("grip")}</span><div class="ttl"><div class="nm">${esc(ex.name)}</div><div class="meta">${esc(rangeText(ex))} · ${esc(label(RL.EQUIPMENT, ex.equip).replace(/ \(.*\)/, ""))}</div></div><button class="iconbtn" data-act="rmitem" data-i="${i}" aria-label="Remove ${esc(ex.name)}">${ic("x")}</button></div>
       ${ex.cues ? `<details class="cues"><summary>Cues</summary>${esc(ex.cues)}</details>` : ""}
-      <div class="last">${lastTxt}</div>
+      <div class="lastline">${last ? "Last time " + fmtDate(last.s.date) : "First time. Today sets your baseline"}</div>
+      <div class="setgrid sethead" aria-hidden="true"><span>Set</span><span>Previous</span><span>${esc(RL.wUnit(ex, c0))}</span><span>${RL.rUnit(ex)}</span><span></span></div>
       <div class="sets">${it.sets.map((c, si) => setHTML(it, ex, c, si, wi[si], last && wi[si] >= 0 ? last.it.sets[wi[si]] : null, i, prior, c0, adviceFor(it, si, ex, c0))).join("")}</div>
-      <div class="card-f"><button class="btn sm" data-act="addset" data-i="${i}">+ Set</button>${it.sets.length > 1 ? `<button class="btn sm" data-act="rmset" data-i="${i}">- Set</button>` : ""}
-        <textarea data-f="note" data-i="${i}" rows="1" placeholder="Notes: setup, cues, how it felt" aria-label="Exercise notes">${esc(it.note)}</textarea></div>
+      <div class="card-f"><button class="btn sm" data-act="addset" data-i="${i}">${ic("plus", "sm")}Add set</button>${it.sets.length > 1 ? `<button class="iconbtn" data-act="rmset" data-i="${i}" aria-label="Remove last set">${ic("minus")}</button>` : ""}<span class="grow"></span>
+        ${ex.equip === "barbell" && ex.measure === "total" ? `<button class="txtbtn muted" data-act="plates" data-i="${i}" data-s="${plateAt < 0 ? it.sets.length - 1 : plateAt}">Plates</button>` : ""}
+        ${exNote ? "" : `<button class="txtbtn muted" data-act="noteopen" data-k="ex:${it.uid}" data-i="${i}">Note</button>`}
+        ${exNote ? `<textarea data-f="note" data-i="${i}" rows="1" placeholder="Setup, cues, how it felt" aria-label="Exercise note">${esc(it.note)}</textarea>` : ""}</div>
     </li>`;
   }
 
@@ -410,42 +439,48 @@
     }
     return null;
   }
+
   function setHTML(it, ex, c, si, w, p, i, prior, c0, adv) {
     const t = c.warm ? null : RL.targetOf(p, ex, c0), pg = p && p.goal, k = it.uid + ":" + si;
     const cw = c.w ?? (RL.LOAD_MEASURES.has(ex.measure) ? null : 0);
     const hit = t && c.done && cw != null && c.r != null && cw >= t.w && c.r >= t.r;
     const d = `data-i="${i}" data-s="${si}"`;
-    let target = "";
+    let tg = "";
     if (p && !c.warm) {
-      target = pg && pg.type === "custom" ? `<span class="target">Goal: <b>${esc(pg.text)}</b></span>`
-        : t ? `<span class="target ${hit ? "hit" : ""}">${hit ? "Goal hit · " : "Goal: "}${esc(RL.goalLabel(pg || { type: "hold" }, ex, c0))} → <b>${fw(t.w)} × ${t.r}</b></span>` : "";
+      tg = pg && pg.type === "custom" ? `<span class="tg">${esc(pg.text || "Custom")}</span>`
+        : t ? `<span class="tg ${hit ? "hit" : ""}">${hit ? "Hit " : ""}${esc(RL.goalLabel(pg || { type: "hold" }, ex, c0))}</span>` : "";
     }
     const isCardio = ex.measure === "cardio", showRir = !isCardio && ex.measure !== "time";
-    const qs = Array.from({ length: 10 }, (_, n) => n + 1).map((n) => `<button class="${c.q === n ? "on" : c.q && n < c.q ? "lit" : ""}" data-act="q" ${d} data-v="${n}" aria-label="Quality ${n}">${n}</button>`).join("");
-    const BD = [["form", "Form"], ["exec", "Execution"], ["pause", "Pauses / tempo"], ["breath", "Breathing"], ["rom", "Range of motion"]];
-    const bd = openBd[k] ? `<div class="bd">${BD.map(([key, lab]) => { const v = (c.bd && c.bd[key]) ?? c.q ?? 7; return `<label><span>${lab}<b id="bdv-${k}-${key}">${v}</b></span><input type="range" min="1" max="10" step="1" value="${v}" data-f="bd.${key}" ${d}></label>`; }).join("")}</div>` : "";
-    let result = "";
+    let detail = "";
     if (c.done && !c.warm) {
       const pr = RL.progression(c, p, ex, c0), g = c.goal, isPr = RL.isPR(c, prior, ex);
-      result = `<div class="result"><div class="btnrow">${pr ? `<span class="prog ${pr.kind}">${esc(pr.text)}${p ? " vs last" : ""}</span>` : ""}${isPr ? `<span class="prog pr">New PR</span>` : ""}</div>
-        <div class="goalrow"><span class="lbl">Next session</span>${RL.goalTypes(ex, c0).map(([ty, l]) => `<button class="chip ${g && g.type === ty ? "on" : ""}" data-act="goal" ${d} data-v="${ty}">${esc(l)}</button>`).join("")}
-        ${g && g.type === "add" ? `<input class="v" type="number" step="any" inputmode="decimal" value="${g.v ?? ""}" placeholder="${esc(RL.wUnit(ex, c0))}" data-f="goalv" ${d} aria-label="Load to add">` : ""}
-        ${g && g.type === "custom" ? `<input type="text" value="${esc(g.text || "")}" placeholder="e.g. 3s eccentric" data-f="goaltext" ${d} aria-label="Custom goal">` : ""}</div>
-        <div class="why">${c.goalAuto !== false && c.why ? `<em>Suggested:</em> ${esc(c.why)}` : c.goalAuto === false ? `Your call. <button class="linkbtn" data-act="goalauto" ${d}>Use suggestion</button>` : ""}</div></div>`;
+      const BD = [["form", "Form"], ["exec", "Execution"], ["pause", "Pauses and tempo"], ["breath", "Breathing"], ["rom", "Range of motion"]];
+      const scale = (act, vals, cur) => vals.map((n) => `<button class="${cur === n ? "on" : act === "q" && cur && n < cur ? "lit" : ""}" data-act="${act}" ${d} data-v="${n}" aria-label="${act === "q" ? "Quality" : "RIR"} ${n}" aria-pressed="${cur === n}">${n}</button>`).join("");
+      detail = `<div class="detail">
+        ${showRir ? `<div class="rate"><span class="lbl">RIR</span><div class="scale rir">${scale("rir", [0, 1, 2, 3, 4, 5], c.rir)}</div></div>` : ""}
+        <div class="rate"><span class="lbl">Quality</span><div class="scale">${scale("q", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], c.q)}</div></div>
+        ${openBd[k] ? `<div class="bd">${BD.map(([key, lab]) => { const v = (c.bd && c.bd[key]) ?? c.q ?? 7; return `<label><span>${lab}<b id="bdv-${k}-${key}">${v}</b></span><input type="range" min="1" max="10" step="1" value="${v}" data-f="bd.${key}" ${d}></label>`; }).join("")}</div>` : ""}
+        ${pr || isPr ? `<div class="resline">${pr ? `<span class="badge ${pr.kind}">${esc(pr.text)}${p ? " vs last" : ""}</span>` : ""}${isPr ? `<span class="badge pr">${ic("trophy", "sm")}New PR</span>` : ""}</div>` : ""}
+        <div class="nextgoal"><span class="muted">Next time</span><button class="pick" data-act="goalopen" data-k="${k}" data-i="${i}" aria-expanded="${!!openGoal[k]}">${esc(RL.goalLabel(g, ex, c0))}${ic("chevdown", "sm")}</button></div>
+        ${openGoal[k] ? `<div class="goalchips">${RL.goalTypes(ex, c0).map(([ty, l]) => `<button class="chip ${g && g.type === ty ? "on" : ""}" data-act="goal" ${d} data-v="${ty}">${esc(l)}</button>`).join("")}
+          ${g && g.type === "add" ? `<input type="number" step="any" inputmode="decimal" value="${g.v ?? ""}" placeholder="${esc(RL.wUnit(ex, c0))}" data-f="goalv" ${d} aria-label="Load to add">` : ""}
+          ${g && g.type === "custom" ? `<input class="wide" type="text" value="${esc(g.text || "")}" placeholder="3 s lowering" data-f="goaltext" ${d} aria-label="Custom goal">` : ""}</div>` : ""}
+        ${c.goalAuto !== false && c.why ? `<div class="why">${esc(c.why)}</div>` : c.goalAuto === false ? `<div class="why">Your call. <button class="txtbtn" data-act="goalauto" ${d}>Use suggestion</button></div>` : ""}
+        ${p && p.note ? `<div class="lastnote"><b>Last time</b>${esc(p.note)}</div>` : ""}
+        ${c.note || openNote[k] ? `<input class="setnote" type="text" value="${esc(c.note || "")}" placeholder="Cue, pain, setup, what to fix" data-f="snote" ${d} aria-label="Note for this set">` : ""}
+        <div class="links">${c.note || openNote[k] ? "" : `<button data-act="noteopen" data-k="${k}" data-i="${i}">Add note</button>`}<button data-act="bd" data-k="${k}">${openBd[k] ? "Hide breakdown" : "Rate form, tempo, breathing"}</button></div>
+      </div>`;
     }
-    const plateBtn = ex.equip === "barbell" && ex.measure === "total" ? `<button class="linkbtn" data-act="plates" ${d}>Plates</button>` : "";
     return `<div class="set ${c.done ? "done" : ""} ${c.warm ? "warm" : ""}">
-      <div class="set-top"><span class="setno">${c.warm ? "Warm" : "Set " + (w + 1)}</span>${target}
-        <button class="warmbtn" data-act="warm" ${d} aria-pressed="${!!c.warm}" title="Warm-up set">W</button>
-        <button class="donebtn" data-act="done" ${d} aria-pressed="${!!c.done}">${c.done ? "Logged" : "Log set"}</button></div>
-      <div class="inputs"><label class="num"><input type="number" step="any" inputmode="decimal" value="${c.w ?? ""}" placeholder="${t ? fw(t.w) : "0"}" data-f="w" ${d} aria-label="${isCardio ? "Distance" : "Load"}"><span>${esc(RL.wUnit(ex, c0))}</span></label>
-        <span class="x">×</span><label class="num"><input class="reps" type="number" step="${isCardio ? "any" : ex.measure === "time" ? "1" : "0.5"}" inputmode="decimal" value="${c.r ?? ""}" placeholder="${t ? t.r : "0"}" data-f="r" ${d} aria-label="${esc(RL.rUnit(ex))}"><span>${RL.rUnit(ex)}</span></label>
-        ${showRir ? `<label class="rir"><select data-f="rir" ${d} aria-label="Reps in reserve"><option value="">RIR</option>${[0, 1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${c.rir === n ? "selected" : ""}>${n} RIR</option>`).join("")}</select></label>` : ""}${plateBtn}</div>
-      ${adv ? `<div class="advice ${adv.action}"><span>Next set</span> ${esc(adv.text)}${adv.w != null && adv.w !== c.w ? ` <button class="btn sm" data-act="applyadv" ${d} data-v="${adv.w}">Use ${fw(adv.w)}</button>` : ""}</div>` : ""}
-      ${c.warm ? "" : `<div class="q"><span class="q-label">Quality</span><div class="qscale">${qs}</div><button class="linkbtn" data-act="bd" data-k="${k}">${openBd[k] ? "Hide breakdown" : "Rate form, tempo, breathing"}</button></div>`}
-      ${p && p.note ? `<div class="lastnote"><span>Last time</span> ${esc(p.note)}</div>` : ""}
-      <input class="setnote" type="text" value="${esc(c.note || "")}" placeholder="Set note: cue, pain, setup, what to fix" data-f="snote" ${d} aria-label="Note for this set">
-      ${bd}${result}</div>`;
+      <div class="setgrid">
+        <button class="setno ${c.warm ? "warm" : ""}" data-act="warm" ${d} aria-label="${c.warm ? "Warm-up set, tap to make it a working set" : "Set " + (w + 1) + ", tap to mark as warm-up"}">${c.warm ? "W" : w + 1}</button>
+        <div class="prev">${p && !c.warm ? fig(p.w, p.r) : "-"}${tg}</div>
+        <input class="cell" type="number" step="any" inputmode="decimal" value="${c.w ?? ""}" placeholder="${t ? fw(t.w) : ""}" data-f="w" ${d} aria-label="${isCardio ? "Distance" : "Load"} in ${esc(RL.wUnit(ex, c0))}">
+        <input class="cell" type="number" step="${isCardio ? "any" : ex.measure === "time" ? "1" : "0.5"}" inputmode="decimal" value="${c.r ?? ""}" placeholder="${t ? t.r : ""}" data-f="r" ${d} aria-label="${esc(RL.rUnit(ex))}">
+        <button class="chk" data-act="done" ${d} aria-pressed="${!!c.done}" aria-label="${c.done ? "Logged, tap to undo" : "Log set"}">${ic("check")}</button>
+      </div>
+      ${adv ? `<div class="advice ${adv.action}"><span>${esc(adv.text)}</span>${adv.w != null && adv.w !== c.w ? `<button class="btn sm" data-act="applyadv" ${d} data-v="${adv.w}">Use ${fw(adv.w)}</button>` : ""}</div>` : ""}
+      ${detail}</div>`;
   }
   // Re-render one card, keeping focus on the same field so typing isn't interrupted.
   function rerenderCard(i) {
@@ -462,11 +497,11 @@
   /* ---------- picker ---------- */
   function openPicker(at) {
     pickAt = at; pickRegion = prefs.rack;
-    modal(`<div class="mh"><h2>${at == null ? "Add exercise" : "Insert exercise"}</h2><button class="iconbtn" data-act="close" aria-label="Close">×</button></div>
-      <input type="search" id="pkq" class="pkq" placeholder="Search, or type a new exercise name" aria-label="Search or name a new exercise" autocomplete="off">
-      <div class="rackf" id="pkf"></div><div id="pkl" class="pkl"></div>`, true);
+    modal(`<div class="mh"><h2>${at == null ? "Add exercise" : "Insert exercise"}</h2><button class="iconbtn" data-act="close" aria-label="Close">${ic("x")}</button></div>
+      <input type="search" id="pkq" class="search pkq" placeholder="Search or name a new one" aria-label="Search or name a new exercise" autocomplete="off">
+      <div class="chips scroll" id="pkf"></div><div id="pkl"></div>`);
     renderPicker();
-    setTimeout(() => { const q = $("#pkq"); if (q) q.focus(); }, 50);
+    setTimeout(() => { const q = $("#pkq"); if (q && wide()) q.focus(); }, 50);
   }
   function renderPicker() {
     const q = ($("#pkq") ? $("#pkq").value : "").trim(), ql = q.toLowerCase();
@@ -474,9 +509,9 @@
     $("#pkf").innerHTML = regionChips(pickRegion, "pkf") + `<button class="chip ${prefs.mine ? "on" : ""}" data-act="mine" aria-pressed="${prefs.mine}">My equipment</button>`;
     const list = SORTED.filter((e) => rackMatch(e, pickRegion, prefs.mine, ql));
     const exact = LIB.some((e) => e.name.toLowerCase() === ql);
-    const create = q && !exact ? `<button class="pkrow pkcreate" data-act="newex" data-name="${esc(q)}"><span class="nm">Create "${esc(q)}"</span><span class="muted">Set its muscle group, equipment and how it's measured</span></button>` : "";
-    $("#pkl").innerHTML = create + (list.map((e) => `<button class="pkrow" data-act="pkadd" data-ex="${esc(e.id)}"><span class="nm">${esc(e.name)}</span><span class="muted">${esc(e.group)} · ${esc(label(RL.EQUIPMENT, e.equip))}</span>${inS.has(e.id) ? `<span class="tag">In session</span>` : ""}</button>`).join("")
-      || (q ? "" : `<div class="empty">Nothing here with your equipment. Turn off "My equipment" to see everything.</div>`));
+    const create = q && !exact ? `<div class="group"><button class="row accent pkcreate" data-act="newex" data-name="${esc(q)}">${ic("plus")}<span class="body"><span class="t">Create "${esc(q)}"</span></span></button></div><div class="sec"></div>` : "";
+    $("#pkl").innerHTML = create + (list.length ? `<div class="group">${list.map((e) => `<button class="row pkrow" data-act="pkadd" data-ex="${esc(e.id)}"><span class="body"><span class="t">${esc(e.name)}</span><span class="d">${esc(e.group)} · ${esc(label(RL.EQUIPMENT, e.equip).replace(/ \(.*\)/, ""))}</span></span>${inS.has(e.id) ? `<span class="badge">In workout</span>` : ""}</button>`).join("")}</div>`
+      : q ? "" : `<p class="note">Nothing here with your equipment. Turn off My equipment to see everything.</p>`);
   }
 
   /* ---------- exercise form (new and edit) ---------- */
@@ -484,16 +519,16 @@
     const c0 = ctx(), r = RL.repRange(Object.assign({}, ex, { repMin: null, repMax: null }), c0.goal);
     const opt = (list, cur) => list.map(([k, l]) => `<option value="${k}" ${cur === k ? "selected" : ""}>${esc(l)}</option>`).join("");
     return `<div class="form">
-      <label class="wide">Name<input id="f-name" value="${esc(ex.name)}" maxlength="80" ${isNew ? "autofocus" : ""}></label>
-      <label>Muscle group<input id="f-group" list="groups" value="${esc(ex.group)}" maxlength="40"></label>
-      <label>Region<select id="f-region">${opt(RL.REGIONS, ex.region)}</select></label>
-      <label>Equipment<select id="f-equip">${opt(RL.EQUIPMENT.map(([k, l]) => [k, l.replace(/ \(.*\)/, "")]), ex.equip)}</select></label>
-      <label>Measured as<select id="f-measure">${opt(RL.MEASURES, ex.measure)}</select></label>
-      <label>Range low<input id="f-min" type="number" min="1" inputmode="numeric" value="${ex.repMin ?? ""}" placeholder="${r ? r[0] : "-"}"></label>
-      <label>Range high<input id="f-max" type="number" min="1" inputmode="numeric" value="${ex.repMax ?? ""}" placeholder="${r ? r[1] : "-"}"></label>
-      <label>Microload<input id="f-inc" type="number" step="any" min="0" inputmode="decimal" value="${ex.inc ?? ""}" placeholder="${fw(RL.incOf(Object.assign({}, ex, { inc: null }), c0.unit))}"></label>
-      <label class="wide">Cues and setup notes<textarea id="f-cues" class="field" rows="3" maxlength="1000" placeholder="Seat height, grip, tempo, what to feel">${esc(ex.cues || "")}</textarea></label>
-    </div><p class="muted small">Leave range and microload blank to use defaults from your goal and unit.</p>`;
+      <label class="wide">Name<input class="field" id="f-name" value="${esc(ex.name)}" maxlength="80"></label>
+      <label>Muscle group<input class="field" id="f-group" list="groups" value="${esc(ex.group)}" maxlength="40"></label>
+      <label>Region<select class="field" id="f-region">${opt(RL.REGIONS, ex.region)}</select></label>
+      <label>Equipment<select class="field" id="f-equip">${opt(RL.EQUIPMENT.map(([k, l]) => [k, l.replace(/ \(.*\)/, "")]), ex.equip)}</select></label>
+      <label>Measured as<select class="field" id="f-measure">${opt(RL.MEASURES, ex.measure)}</select></label>
+      <label>Range low<input class="field" id="f-min" type="number" min="1" inputmode="numeric" value="${ex.repMin ?? ""}" placeholder="${r ? r[0] : "-"}"></label>
+      <label>Range high<input class="field" id="f-max" type="number" min="1" inputmode="numeric" value="${ex.repMax ?? ""}" placeholder="${r ? r[1] : "-"}"></label>
+      <label class="wide">Microload<input class="field" id="f-inc" type="number" step="any" min="0" inputmode="decimal" value="${ex.inc ?? ""}" placeholder="${fw(RL.incOf(Object.assign({}, ex, { inc: null }), c0.unit))}"></label>
+      <label class="wide">Cues and setup<textarea id="f-cues" class="field" rows="3" maxlength="1000" placeholder="Seat height, grip, tempo, what to feel">${esc(ex.cues || "")}</textarea></label>
+    </div><p class="note">Leave range and microload blank to use defaults from your goal and unit</p>`;
   }
   function readExForm(root) {
     const v = (id) => root.querySelector(id).value.trim();
@@ -507,10 +542,10 @@
   }
   function openNewEx(name) {
     const base = { name: name || "", group: "", region: pickRegion === "all" || pickRegion === "full" ? "upper" : pickRegion, equip: "machine", measure: "total", pattern: "" };
-    modal(`<div class="mh"><h2>New exercise</h2><button class="iconbtn" data-act="close" aria-label="Close">×</button></div>
+    modal(`<div class="mh"><h2>New exercise</h2><button class="iconbtn" data-act="close" aria-label="Close">${ic("x")}</button></div>
       ${exFormHTML(base, true)}<div class="err" id="exErr" role="alert"></div>
-      <div class="btnrow end"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="createex">${pickAt !== undefined && pickAt !== "lib" ? "Create and add" : "Create"}</button></div>`, true);
-    setTimeout(() => { const f = $("#modal #f-name"); if (f) f.focus(); }, 50);
+      <div class="ctabar"><button class="btn back" data-act="close">Cancel</button><button class="btn primary" data-act="createex">${pickAt !== undefined && pickAt !== "lib" ? "Create and add" : "Create"}</button></div>`);
+    setTimeout(() => { const f = $("#modal #f-name"); if (f && !name) f.focus(); }, 50);
   }
 
   /* ---------- history ---------- */
@@ -527,7 +562,7 @@
         if (RL.isPR(c, prior, ex)) prs++;
       });
     });
-    return { sets, avgQ: qn ? (qsum / qn).toFixed(1) : "-", hits, targets, prs };
+    return { sets, avgQ: qn ? (qsum / qn).toFixed(1) : null, hits, targets, prs };
   }
   function weekKey(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getTime(); }
   function renderHistory() {
@@ -541,127 +576,127 @@
     const vol = {};
     in7.forEach((s) => s.items.forEach((it) => { const g = exById(it.exId).group || "Other"; vol[g] = (vol[g] || 0) + workingDone(it.sets).length; }));
     const vmax = Math.max(10, ...Object.values(vol));
-    const volHTML = Object.keys(vol).length ? `<div class="vol"><h2 class="sec-title">Working sets, last 7 days</h2>${Object.entries(vol).sort((a, b) => b[1] - a[1]).map(([g, n]) => `<div class="row"><span>${esc(g)}</span><meter min="0" max="${vmax}" value="${n}" aria-label="${esc(g)} sets">${n}</meter><b>${n}</b></div>`).join("")}</div>` : "";
-    $("#v-history").innerHTML = `<div class="stats-grid">
-        <div class="stat"><b>${in7.length}</b><span>Sessions, 7 days</span></div>
-        <div class="stat"><b>${in30.length}</b><span>Sessions, 30 days</span></div>
-        <div class="stat"><b>${streak}</b><span>Week streak</span></div>
-        <div class="stat"><b>${list.length}</b><span>Total sessions</span></div></div>
-      ${volHTML}
-      <div class="sess-head"><h2 class="sec-title">Session history</h2></div>` + (list.length ? `<div class="hist">${list.map((s) => {
-      const st = sessionStats(s);
-      return `<div class="hcard"><div class="t"><b>${esc(s.label || "Session")}</b><span>${fmtDate(s.date)}</span></div>
-        <div class="stats"><span><b>${s.items.length}</b> exercises</span><span><b>${st.sets}</b> sets</span><span>Quality <b>${st.avgQ}</b></span>${st.targets ? `<span>Goals hit <b>${st.hits}/${st.targets}</b></span>` : ""}${st.prs ? `<span>PRs <b>${st.prs}</b></span>` : ""}</div>
-        <div class="exs">${s.items.map((it) => esc(exById(it.exId).name)).join(" → ")}</div>
-        <div class="row"><button class="btn sm" data-act="view" data-id="${esc(s.id)}">Logbook</button><button class="btn sm" data-act="repeat" data-id="${esc(s.id)}">Repeat</button><button class="btn sm" data-act="saveroutine" data-id="${esc(s.id)}">Save as routine</button><button class="btn sm danger" data-act="del" data-id="${esc(s.id)}">Delete</button></div></div>`;
-    }).join("")}</div>` : `<div class="empty">No finished sessions yet. Finish a session on the Train tab and it shows up here.</div>`);
+    $("#v-history").innerHTML = navHTML("History", list.length ? plural(list.length, "workout") + " logged" : "")
+      + `<div class="tiles"><div class="tile"><b>${in7.length}</b><span>Last 7 days</span></div><div class="tile"><b>${in30.length}</b><span>Last 30 days</span></div><div class="tile"><b>${streak}</b><span>Week streak</span></div><div class="tile"><b>${list.length}</b><span>All time</span></div></div>`
+      + (Object.keys(vol).length ? `<div class="sec">Working sets, last 7 days</div><div class="group bars">${Object.entries(vol).sort((a, b) => b[1] - a[1]).map(([g, n]) => `<div class="bar"><span>${esc(g)}</span><progress max="${vmax}" value="${n}" aria-label="${esc(g)}: ${n} sets">${n}</progress><b>${n}</b></div>`).join("")}</div>` : "")
+      + `<div class="sec">Workouts</div>` + (list.length ? `<div class="group">${list.map((s) => {
+        const st = sessionStats(s);
+        return rowBtn("view", `data-id="${esc(s.id)}"`, esc(s.label || "Workout"), fmtDate(s.date) + " · " + plural(s.items.length, "exercise") + " · " + plural(st.sets, "set") + (st.avgQ ? " · quality " + st.avgQ : ""), st.prs ? `<span class="badge pr">${st.prs} PR</span>` : "");
+      }).join("")}</div>` : `<div class="empty-card"><b>No workouts yet</b>Finish one on the Train tab and it shows up here</div>`);
   }
   function logbookHTML(s) {
     const c0 = ctx();
-    return `<div class="logbook">${s.items.map((it) => {
+    return s.items.map((it) => {
       const ex = exById(it.exId), sets = workingDone(it.sets), warm = it.sets.filter((x) => x.done && x.warm).length, last = lastFor(it.exId, s.ts, s.id);
-      const qs = sets.map((x) => x.q).filter((x) => x != null);
-      const wl = ex.measure === "cardio" ? "Distance" : RL.LOAD_MEASURES.has(ex.measure) ? "Weight" : "Load", rl = RL.rUnit(ex) === "reps" ? "Reps" : RL.rUnit(ex) === "sec" ? "Seconds" : "Minutes";
-      return `<div class="lb"><h3>${esc(ex.name)}</h3><div class="cols"><div>
-        <div><span class="k">Sets:</span> ${sets.length}${warm ? " + " + warm + " warm-up" : ""}</div><div><span class="k">${wl}:</span> ${sets.map((x) => fw(x.w)).join(" / ")} ${esc(RL.wUnit(ex, c0))}</div><div><span class="k">${rl}:</span> ${sets.map((x) => x.r ?? "-").join(" / ")}</div>
-        <div><span class="k">Progressions:</span></div>${sets.map((x, i) => { const p = RL.progression(x, last ? last.it.sets[i] : null, ex, c0); return `<div>Set ${i + 1}: ${esc(p ? p.text : "-")}</div>`; }).join("")}</div>
-        <div><div class="k">Next session goal:</div>${sets.map((x, i) => `<div>Set ${i + 1}: ${esc(RL.goalLabel(x.goal, ex, c0))}</div>`).join("")}</div></div>
-        <span class="q">Quality ${qs.length ? qs.join(" / ") + " · avg " + (qs.reduce((a, b) => a + b, 0) / qs.length).toFixed(1) : "not rated"}${sets.some((x) => x.rir != null) ? " · RIR " + sets.map((x) => x.rir ?? "-").join(" / ") : ""}</span>
-        ${sets.map((x, i) => (x.note ? `<div class="note">Set ${i + 1}: ${esc(x.note)}</div>` : "")).join("")}
-        ${it.note ? `<div class="note">${esc(it.note)}</div>` : ""}</div>`;
-    }).join("")}</div>`;
+      return `<div class="lbx"><h3>${esc(ex.name)}</h3><table>${sets.map((x, i) => {
+        const p = RL.progression(x, last ? last.it.sets[i] : null, ex, c0);
+        const meta = [x.rir != null ? x.rir + " RIR" : "", x.q != null ? "Q" + x.q : ""].filter(Boolean).join(" · ");
+        return `<tr><td>${i + 1}</td><td><span class="fig">${fig(x.w, x.r)}</span> <span class="muted small">${esc(RL.wUnit(ex, c0))}${meta ? " · " + meta : ""}</span></td><td class="r"><span class="badge ${p ? p.kind : ""}">${esc(p ? p.text : "-")}</span></td></tr>`;
+      }).join("")}</table>
+        <div class="nt">Next time: ${sets.map((x, i) => (sets.length > 1 ? "set " + (i + 1) + " " : "") + esc(RL.goalLabel(x.goal, ex, c0))).join(", ")}${warm ? ` · ${warm} warm-up` : ""}</div>
+        ${sets.map((x, i) => (x.note ? `<div class="nt">Set ${i + 1}: ${esc(x.note)}</div>` : "")).join("")}${it.note ? `<div class="nt">${esc(it.note)}</div>` : ""}</div>`;
+    }).join("");
+  }
+  function openSession(id, justFinished) {
+    const ss = S.sessions.find((x) => x.id === id); if (!ss) return;
+    const st = sessionStats(ss);
+    modal(`<div class="mh"><h2>${esc(ss.label || "Workout")}</h2><button class="iconbtn" data-act="close" aria-label="Close">${ic("x")}</button></div>
+      <p>${fmtDate(ss.date)} · ${plural(st.sets, "working set")}${st.targets ? " · " + st.hits + " of " + st.targets + " goals hit" : ""}${st.prs ? " · " + st.prs + " new PR" + (st.prs > 1 ? "s" : "") : ""}</p>
+      ${logbookHTML(ss)}
+      ${justFinished ? `<div class="ctabar"><button class="btn primary" data-act="close">Done</button></div>`
+        : `<div class="ctabar"><button class="btn" data-act="repeat" data-id="${esc(ss.id)}">Repeat</button><button class="btn" data-act="saveroutine" data-id="${esc(ss.id)}">Save as routine</button><button class="btn danger back" data-act="del" data-id="${esc(ss.id)}" aria-label="Delete workout">${ic("trash")}</button></div>`}`, false, true);
   }
 
   /* ---------- exercises ---------- */
   function renderExercises() {
-    if (!selEx || !LIB.find((e) => e.id === selEx)) selEx = SORTED[0] ? SORTED[0].id : null;
-    const ex = selEx ? exById(selEx) : null, c0 = ctx();
+    const split = wide();
+    if (!selEx || !LIB.find((e) => e.id === selEx)) { selEx = SORTED[0] ? SORTED[0].id : null; if (!split) exOpen = false; }
     const q = exQuery.toLowerCase();
     const rows = SORTED.filter((e) => !q || e.name.toLowerCase().includes(q) || e.group.toLowerCase().includes(q) || e.equip.includes(q));
-    const hist = ex ? doneSessions().slice().reverse().map((s) => {
+    let letter = "", listHTML = "";
+    rows.forEach((e, n) => {
+      const L = e.name[0].toUpperCase();
+      if (L !== letter) { listHTML += (n ? "</div>" : "") + `<div class="letter">${esc(L)}</div><div class="group">`; letter = L; }
+      listHTML += `<button class="row ${e.id === selEx && split ? "sel" : ""}" data-act="selex" data-id="${esc(e.id)}"><span class="body"><span class="t">${esc(e.name)}</span><span class="d">${esc(e.group)} · ${esc(label(RL.EQUIPMENT, e.equip).replace(/ \(.*\)/, ""))}</span></span><span class="end">${e.custom ? `<span class="badge">Custom</span>` : ""}${ic("chev", "sm chev")}</span></button>`;
+    });
+    if (rows.length) listHTML += "</div>";
+    const list = `<div class="exlist">${navHTML("Exercises", LIB.length + " in your library", `<button class="btn tint sm" data-act="newex">${ic("plus", "sm")}New</button>`)}
+      <input type="search" class="search" id="exsearch" value="${esc(exQuery)}" placeholder="Search" aria-label="Search exercises">
+      ${listHTML || `<p class="note">No match</p>`}</div>`;
+    const detail = selEx ? exDetailHTML(exById(selEx)) : "";
+    $("#v-exercises").innerHTML = split ? `<div class="exv split">${list}<div>${detail}</div></div>` : `<div class="exv">${exOpen && selEx ? detail : list}</div>`;
+  }
+  function exDetailHTML(ex) {
+    const c0 = ctx();
+    const hist = doneSessions().slice().reverse().map((s) => {
       const it = s.items.find((i) => i.exId === ex.id); if (!it) return null;
       const sets = workingDone(it.sets).filter((x) => x.r != null); if (!sets.length) return null;
       const best = sets.reduce((a, b) => (RL.metricOf(ex, b) > RL.metricOf(ex, a) ? b : a));
       const qs = sets.map((x) => x.q).filter((x) => x != null);
       return { s, sets, best, m: RL.metricOf(ex, best), q: qs.length ? qs.reduce((a, b) => a + b, 0) / qs.length : null };
-    }).filter(Boolean) : [];
-    const edited = ex && ex.builtin && S.exercises.edits[ex.id];
-    $("#v-exercises").innerHTML = `<div class="exv"><div class="exlist">
-      <input type="search" class="exsearch" id="exsearch" value="${esc(exQuery)}" placeholder="Search ${LIB.length} exercises" aria-label="Search exercises">
-      <div class="rows">${rows.map((e) => `<div class="row ${e.id === selEx ? "on" : ""}" data-act="selex" data-id="${esc(e.id)}" role="button" tabindex="0"><span class="nm">${esc(e.name)}${e.custom ? ` <span class="tag">Custom</span>` : ""}</span><small>${esc(e.group)}</small></div>`).join("") || `<div class="empty">No match.</div>`}</div>
-      <div class="new"><button class="btn sm" data-act="newex">+ New exercise</button></div></div>
-      ${ex ? `<div class="panel">${exFormHTML(ex, false)}
-        <div class="btnrow"><button class="btn dark" data-act="saveex">Save changes</button>${edited ? `<button class="btn" data-act="resetex">Reset to default</button>` : ""}<button class="btn danger" data-act="delex">${ex.custom ? "Delete exercise" : "Hide from rack"}</button></div>
-        <h2 class="sec-title">Progress</h2>${chartHTML(hist, ex, c0)}
-        ${hist.length ? `<div class="tablewrap"><table class="h"><thead><tr><th>Date</th><th>Sets</th><th>Best set</th><th>${esc(RL.metricLabel(ex, c0))}</th><th>Quality</th></tr></thead><tbody>${hist.slice().reverse().map((h) => `<tr><td>${fmtDate(h.s.date)}</td><td>${h.sets.map((x) => fw(x.w) + "×" + x.r).join(", ")}</td><td>${fw(h.best.w)}×${h.best.r}</td><td>${fw(h.m.toFixed(1))}</td><td>${h.q != null ? h.q.toFixed(1) : "-"}</td></tr>`).join("")}</tbody></table></div>` : ""}
-      </div>` : `<div class="panel empty">Add an exercise to get started.</div>`}</div>`;
+    }).filter(Boolean);
+    const edited = ex.builtin && S.exercises.edits[ex.id];
+    return `<button class="backlink" data-act="exback">${ic("chevleft")}Exercises</button>
+      ${navHTML(esc(ex.name), esc(ex.group) + " · " + esc(label(RL.EQUIPMENT, ex.equip).replace(/ \(.*\)/, "")) + " · " + esc(rangeText(ex)))}
+      <div class="sec">Progress</div>${chartHTML(hist, ex, c0)}
+      ${hist.length ? `<div class="sec">Sessions</div><div class="tablewrap"><table class="h"><thead><tr><th>Date</th><th>Best set</th><th>${esc(RL.metricLabel(ex, c0))}</th><th>Quality</th></tr></thead><tbody>${hist.slice().reverse().map((h) => `<tr><td>${fmtDate(h.s.date)}</td><td class="n">${fig(h.best.w, h.best.r)}</td><td class="n">${fw(h.m.toFixed(1))}</td><td class="n">${h.q != null ? h.q.toFixed(1) : "-"}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      <div class="sec">Details</div><div class="panel">${exFormHTML(ex, false)}</div>
+      <div class="btnrow"><button class="btn primary" data-act="saveex">Save</button>${edited ? `<button class="btn" data-act="resetex">Reset to default</button>` : ""}<button class="btn danger" data-act="delex">${ex.custom ? "Delete" : "Hide"}</button></div>`;
   }
   function chartHTML(h, ex, c0) {
-    if (h.length < 2) return `<div class="empty">Log this exercise in two sessions to see a trend line.${RL.LOAD_MEASURES.has(ex.measure) ? " Estimated 1RM uses the Epley formula on your best set." : ""}</div>`;
-    const W = 640, H = 220, L = 48, R = 40, T = 16, B = 34;
+    if (h.length < 2) return `<div class="empty-card"><b>Not enough data yet</b>Log this exercise in two sessions to see a trend${RL.LOAD_MEASURES.has(ex.measure) ? ". Estimated 1RM uses the Epley formula on your best set" : ""}</div>`;
+    const W = 640, H = 240, L = 44, R = 36, T = 16, B = 32;
     const ev = h.map((x) => x.m);
     let lo = Math.min(...ev), hi = Math.max(...ev);
     const pad = (hi - lo) * 0.15 || 5;
     lo = Math.max(0, Math.floor(lo - pad)); hi = Math.ceil(hi + pad);
     const X = (i) => L + (W - L - R) * (i / (h.length - 1)), Y = (v) => T + (H - T - B) * (1 - (v - lo) / (hi - lo)), YQ = (q) => T + (H - T - B) * (1 - (q - 1) / 9);
-    const ticks = [0, 1, 2, 3, 4].map((k) => lo + (hi - lo) * k / 4);
+    const ticks = [0, 1, 2, 3].map((k) => lo + (hi - lo) * k / 3);
     const pts = h.map((x, i) => X(i).toFixed(1) + "," + Y(x.m).toFixed(1)).join(" ");
     const area = `M${X(0)},${H - B} L${pts.split(" ").join(" L")} L${X(h.length - 1)},${H - B} Z`;
     const qpts = h.map((x, i) => (x.q != null ? X(i).toFixed(1) + "," + YQ(x.q).toFixed(1) : null)).filter(Boolean).join(" ");
-    return `<div class="tablewrap"><svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(RL.metricLabel(ex, c0))} and quality by session">
-      ${ticks.map((t) => `<line x1="${L}" x2="${W - R}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 8}" y="${Y(t) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${Math.round(t)}</text>`).join("")}
-      ${[1, 5, 10].map((q) => `<text x="${W - R + 8}" y="${YQ(q) + 4}" font-size="11" fill="var(--muted)">${q}</text>`).join("")}
-      <path d="${area}" fill="var(--steel)" opacity=".10"/>
-      <polyline points="${pts}" fill="none" stroke="var(--steel)" stroke-width="2.5"/>
-      ${qpts ? `<polyline points="${qpts}" fill="none" stroke="var(--hazard)" stroke-width="2" stroke-dasharray="5 4"/>` : ""}
-      ${h.map((x, i) => `<circle cx="${X(i)}" cy="${Y(x.m)}" r="${i === h.length - 1 ? 5 : 3.5}" fill="var(--steel)"/><text x="${X(i)}" y="${H - B + 18}" text-anchor="middle" font-size="11" fill="var(--muted)">${fmtDate(x.s.date).replace(/^\w+, /, "")}</text>`).join("")}
-      <text x="${L}" y="${H - 4}" font-size="11" fill="var(--steel)">Solid: ${esc(RL.metricLabel(ex, c0))}</text><text x="${L + 220}" y="${H - 4}" font-size="11" fill="var(--warn)">Dashed: avg quality (1-10, right axis)</text>
-    </svg></div>`;
+    const every = Math.ceil(h.length / 6);
+    return `<div class="chartbox"><svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(RL.metricLabel(ex, c0))} and quality by session">
+      ${ticks.map((t) => `<line x1="${L}" x2="${W - R}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--line)" stroke-width="1"/><text x="${L - 8}" y="${Y(t) + 4}" text-anchor="end" font-size="11" font-family="var(--mono)" fill="var(--faint)">${Math.round(t)}</text>`).join("")}
+      ${[1, 10].map((q) => `<text x="${W - R + 8}" y="${YQ(q) + 4}" font-size="11" font-family="var(--mono)" fill="var(--faint)">${q}</text>`).join("")}
+      <path d="${area}" fill="var(--accent)" opacity=".08"/>
+      ${qpts ? `<polyline points="${qpts}" fill="none" stroke="var(--faint)" stroke-width="1.5" stroke-dasharray="4 4"/>` : ""}
+      <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${h.map((x, i) => `<circle cx="${X(i)}" cy="${Y(x.m)}" r="${i === h.length - 1 ? 4.5 : 3}" fill="var(--accent)"/>${i % every === 0 || i === h.length - 1 ? `<text x="${X(i)}" y="${H - B + 20}" text-anchor="middle" font-size="11" font-family="var(--mono)" fill="var(--faint)">${fmtDate(x.s.date).replace(/^\w+, /, "")}</text>` : ""}`).join("")}
+    </svg><div class="chartkey"><span><i></i>${esc(RL.metricLabel(ex, c0))}</span><span><i class="q"></i>Average quality, right axis</span></div></div>`;
   }
 
   /* ---------- settings ---------- */
   function seg(act, cur, list) { return `<span class="seg">${list.map(([k, l]) => `<button data-act="${act}" data-v="${k}" aria-pressed="${String(cur) === String(k)}">${esc(l)}</button>`).join("")}</span>`; }
+  const setRow = (lbl, control) => `<div class="row"><span class="body"><span class="t">${lbl}</span></span>${control}</div>`;
   function renderSettings() {
     const p = S.profile, st = S.settings;
     const hiddenN = S.exercises.hidden.length, customN = S.exercises.custom.length;
-    $("#v-settings").innerHTML = `<div class="settings">
-      <div class="panel"><h2>Profile</h2>
-        <dl class="kv"><dt>Experience</dt><dd>${esc(label(EXPERIENCE, p.experience))}</dd><dt>Goals</dt><dd>${(p.goals || [p.goal]).map((g, i) => (i + 1) + ". " + esc(label(GOALS, g))).join("<br>")}</dd>
-        <dt>Places</dt><dd>${(p.environments || [p.environment]).map((k) => esc(label(RL.ENVIRONMENTS, k))).join(", ")}</dd><dt>Days a week</dt><dd>${esc(p.days)}</dd>
+    const sec = (title, body, note) => `<div><div class="sec">${title}</div>${body}${note ? `<p class="note">${note}</p>` : ""}</div>`;
+    $("#v-settings").innerHTML = navHTML("Settings") + `<div class="settings">`
+      + sec("Profile", `<div class="group"><dl class="kv"><dt>Experience</dt><dd>${esc(label(EXPERIENCE, p.experience))}</dd>
+        <dt>Goals</dt><dd>${(p.goals || [p.goal]).map((g, i) => (i + 1) + ". " + esc(label(GOALS, g))).join("<br>")}</dd>
+        <dt>Places</dt><dd>${(p.environments || [p.environment]).map((k) => esc(label(RL.ENVIRONMENTS, k))).join(", ")}</dd>
+        <dt>Days a week</dt><dd>${esc(p.days)}</dd>
         <dt>Equipment</dt><dd>${p.equipment.length ? p.equipment.map((k) => esc(label(RL.EQUIPMENT, k).replace(/ \(.*\)/, ""))).join(", ") : "Bodyweight only"}</dd>
         ${p.limitations ? `<dt>Limitations</dt><dd>${esc(p.limitations)}</dd>` : ""}</dl>
-        ${p.readinessFlag ? `<div class="notice">Your health check flagged at least one item. Keep your physician or qualified professional in the loop as you train.</div>` : ""}
-        <div class="btnrow"><button class="btn" data-act="survey">Retake survey</button></div></div>
-      <div class="panel"><h2>Units and display</h2>
-        <div class="setrow"><span>Weight</span>${seg("setunit", st.unit, [["lb", "lb"], ["kg", "kg"]])}</div>
-        <div class="setrow"><span>Distance</span>${seg("setdist", st.dist, [["km", "km"], ["mi", "mi"]])}</div>
-        <p class="muted small">Changing units relabels your log. It does not convert numbers you already entered.</p>
-        <div class="setrow"><span>Theme</span>${seg("settheme", st.theme, [["auto", "Auto"], ["light", "Light"], ["dark", "Dark"]])}</div>
-        <div class="setrow"><span>Beginner tips on the Train tab</span>${seg("settips", st.tips ? "on" : "off", [["on", "On"], ["off", "Off"]])}</div></div>
-      <div class="panel"><h2>Rest timer</h2>
-        <p class="muted small">Starts when you log a set. Vibrates when time is up on devices that support it.</p>
-        <div class="setrow">${seg("setrest", st.restSec, [[0, "Off"], [60, "1:00"], [90, "1:30"], [120, "2:00"], [180, "3:00"], [240, "4:00"]])}</div></div>
-      <div class="panel"><h2>Coaching</h2>
-        <div class="setrow"><span>Target RIR for working sets</span>${seg("setrir", st.targetRir ?? 1, [[0, "0"], [1, "1"], [2, "2"], [3, "3"]])}</div>
-        <p class="muted small">After each logged set, the next set gets advice: more load if you had reps to spare beyond this target, less if you fell short of your range at 0 RIR.</p>
-        <div class="setrow"><span>Learn from my history</span>${seg("setadapt", st.adaptive !== false ? "on" : "off", [["on", "On"], ["off", "Off"]])}</div>
-        <p class="muted small">Tracks which goals you actually hit on each exercise. If microloads keep missing but extra reps land (or the other way round), suggestions switch. Needs 3 attempts before it changes anything.</p></div>
-      <div class="panel"><h2>Routines</h2>
-        <div class="tlist">${S.templates.map((t) => `<div class="row"><span class="nm">${esc(t.name)} <span class="muted small">${t.exIds.length} exercises</span></span><button class="btn sm" data-act="tstart" data-id="${esc(t.id)}">Start</button><button class="iconbtn" data-act="tdel" data-id="${esc(t.id)}" aria-label="Delete routine ${esc(t.name)}">×</button></div>`).join("") || `<div class="muted small">No routines. Save one from a session, or rebuild the starter set.</div>`}</div>
-        <div class="btnrow"><button class="btn sm" data-act="rebuild">Rebuild starter routines</button></div></div>
-      <div class="panel"><h2>Exercise library</h2>
-        <p class="small">${RL.EXERCISES.length} built-in, ${customN} custom, ${hiddenN} hidden.</p>
-        <div class="btnrow"><button class="btn sm" data-act="newex">+ New exercise</button>${hiddenN ? `<button class="btn sm" data-act="unhide">Show hidden exercises again</button>` : ""}</div></div>
-      <div class="panel"><h2>Your data</h2>
-        <p class="small">${serverMode ? "Stored on your Rep Ledger server, with a copy in this browser for offline use." : "Stored in this browser only. Export a backup regularly; clearing site data deletes it."}</p>
-        <div class="btnrow"><button class="btn sm" data-act="export">Export backup (JSON)</button><button class="btn sm" data-act="csv">Export sets (CSV)</button>
-        <label class="btn sm">Import backup<input type="file" id="importFile" accept="application/json,.json" hidden></label></div>
-        <div class="btnrow"><button class="btn sm danger" data-act="wipe">Delete all data</button></div></div>
-      <div class="panel"><h2>Legal and credits</h2>
-        <p class="small">Disclaimer accepted ${S.consent ? esc(new Date(S.consent.acceptedAt).toLocaleDateString()) : "-"}. <button class="linkbtn" data-act="legal">Read it again</button></p>
-        <p class="credit">Inspired by <a href="https://www.instagram.com/trainingbyjp/" target="_blank" rel="noopener noreferrer">@trainingbyjp</a> and his approach to training: log every set against last time, rate how well you did it, and pick one small step forward for next session. Rep Ledger is independent and not affiliated with or endorsed by him.</p>
-        <p class="muted small">Rep Ledger ${VERSION}. Free and open source under the MIT License.</p></div>
-    </div>`;
+        ${rowBtn("survey", "", "Retake survey", "", "")}</div>`, p.readinessFlag ? "Your health check flagged at least one item. Keep your physician or a qualified professional in the loop as you train" : "")
+      + sec("Units and display", `<div class="group">${setRow("Weight", seg("setunit", st.unit, [["lb", "lb"], ["kg", "kg"]]))}${setRow("Distance", seg("setdist", st.dist, [["km", "km"], ["mi", "mi"]]))}${setRow("Appearance", seg("settheme", st.theme, [["auto", "Auto"], ["light", "Light"], ["dark", "Dark"]]))}${setRow("Tips on Train", seg("settips", st.tips ? "on" : "off", [["on", "On"], ["off", "Off"]]))}</div>`,
+        "Changing units relabels your log. It does not convert numbers you already entered")
+      + sec("Rest timer", `<div class="group"><div class="row">${seg("setrest", st.restSec, [[0, "Off"], [60, "1:00"], [90, "1:30"], [120, "2:00"], [180, "3:00"], [240, "4:00"]])}</div></div>`, "Starts when you log a set")
+      + sec("Coaching", `<div class="group">${setRow("Target RIR", seg("setrir", st.targetRir ?? 1, [[0, "0"], [1, "1"], [2, "2"], [3, "3"]]))}${setRow("Learn from my history", seg("setadapt", st.adaptive !== false ? "on" : "off", [["on", "On"], ["off", "Off"]]))}</div>`,
+        "Next-set advice compares your RIR with the target. Learning from history switches between microloads and extra reps when one keeps missing on an exercise, after 3 attempts")
+      + sec("Routines", `<div class="group">${S.templates.map((t) => `<div class="row"><span class="body"><span class="t">${esc(t.name)}</span><span class="d">${plural(t.exIds.length, "exercise")}</span></span><button class="btn sm" data-act="tstart" data-id="${esc(t.id)}">Start</button><button class="iconbtn" data-act="tdel" data-id="${esc(t.id)}" aria-label="Delete routine ${esc(t.name)}">${ic("trash")}</button></div>`).join("")}
+        <button class="row accent" data-act="rebuild">Rebuild starter routines</button></div>`)
+      + sec("Exercise library", `<div class="group"><div class="row"><span class="body"><span class="t">${RL.EXERCISES.length} built in</span><span class="d">${customN} custom, ${hiddenN} hidden</span></span></div><button class="row accent" data-act="newex">New exercise</button>${hiddenN ? `<button class="row accent" data-act="unhide">Show hidden exercises</button>` : ""}</div>`)
+      + sec("Your data", `<div class="group"><div class="row"><span class="body"><span class="t">${serverMode ? "Synced to your server" : "Stored on this device"}</span><span class="d" id="syncText">${esc(syncText)}</span></span></div>
+        <button class="row accent" data-act="export">Export backup</button><button class="row accent" data-act="csv">Export sets as CSV</button>
+        <label class="row accent filebtn">Import backup<input type="file" id="importFile" accept="application/json,.json" hidden></label>
+        <button class="row danger" data-act="wipe">Delete all data</button></div>`, serverMode ? "" : "Clearing this browser's site data deletes your log. Export a backup regularly")
+      + sec("About", `<div class="group"><div class="row"><span class="body credit">Inspired by <a href="https://www.instagram.com/trainingbyjp/" target="_blank" rel="noopener noreferrer">@trainingbyjp</a> and his approach to training: log every set against last time, judge how well you moved, and take one small step forward. Rep Ledger is independent and not affiliated with or endorsed by him.</span></div>
+        ${rowBtn("legal", "", "Disclaimer", S.consent ? "Accepted " + esc(new Date(S.consent.acceptedAt).toLocaleDateString()) : "", "")}
+        <div class="row"><span class="body"><span class="t">Version</span></span><span class="end">${VERSION}</span></div></div>`, "Free and open source under the MIT License")
+      + `</div>`;
   }
 
   /* ---------- rest timer ---------- */
@@ -687,17 +722,18 @@
     $("#timer").innerHTML = `<div class="timer" role="timer" aria-label="Rest timer"><span class="lbl">Rest</span><b>${m}:${s}</b><button data-act="tadj" data-v="-15">-15</button><button data-act="tadj" data-v="15">+15</button><button data-act="tskip">Skip</button></div>`;
   }
 
-  /* ---------- modals ---------- */
-  function modal(html, small) { $("#modal").innerHTML = `<div class="modal" data-act="close-bg"><div class="box ${small ? "small" : ""}" role="dialog" aria-modal="true">${html}</div></div>`; }
+  /* ---------- sheets ---------- */
+  function modal(html, small, widebox) { $("#modal").innerHTML = `<div class="modal" data-act="close-bg"><div class="box ${widebox ? "wide" : ""}" role="dialog" aria-modal="true"><div class="grab" aria-hidden="true"></div>${html}</div></div>`; }
   function closeModal() { $("#modal").innerHTML = ""; }
-  const confirmBox = (title, text, yesAct, yesLabel, extra) => modal(`<div class="mh"><h2>${esc(title)}</h2></div><p>${text}</p><div class="btnrow"><button class="btn danger" data-act="${yesAct}" ${extra || ""}>${esc(yesLabel)}</button><button class="btn" data-act="close">Cancel</button></div>`, true);
+  const confirmBox = (title, text, yesAct, yesLabel, extra) => modal(`<div class="mh"><h2>${esc(title)}</h2></div><p>${text}</p><div class="ctabar"><button class="btn back" data-act="close">Cancel</button><button class="btn danger" data-act="${yesAct}" ${extra || ""}>${esc(yesLabel)}</button></div>`, true);
+  const notice = (title, text) => modal(`<div class="mh"><h2>${esc(title)}</h2></div><p>${text}</p><div class="ctabar"><button class="btn primary" data-act="close">OK</button></div>`, true);
 
   function openPlates(i, si) {
     const s = active(), c = s.items[i].sets[si], kg = S.settings.unit === "kg";
     const bars = kg ? [20, 15, 10] : [45, 35, 15];
-    modal(`<div class="mh"><h2>Plate calculator</h2><button class="iconbtn" data-act="close" aria-label="Close">×</button></div>
-      <div class="form"><label>Total weight (${S.settings.unit})<input id="pl-total" type="number" step="any" inputmode="decimal" value="${c.w ?? ""}"></label>
-      <label>Bar<select id="pl-bar">${bars.map((b) => `<option value="${b}">${b} ${S.settings.unit}</option>`).join("")}</select></label></div>
+    modal(`<div class="mh"><h2>Plate calculator</h2><button class="iconbtn" data-act="close" aria-label="Close">${ic("x")}</button></div>
+      <div class="form"><label>Total (${S.settings.unit})<input class="field" id="pl-total" type="number" step="any" inputmode="decimal" value="${c.w ?? ""}"></label>
+      <label>Bar<select class="field" id="pl-bar">${bars.map((b) => `<option value="${b}">${b} ${S.settings.unit}</option>`).join("")}</select></label></div>
       <div id="pl-out"></div>`, true);
     drawPlates();
   }
@@ -705,8 +741,8 @@
     const kg = S.settings.unit === "kg";
     const avail = kg ? [25, 20, 15, 10, 5, 2.5, 1.25] : [45, 35, 25, 10, 5, 2.5];
     const r = RL.plates(num($("#pl-total").value) ?? 0, num($("#pl-bar").value), avail);
-    $("#pl-out").innerHTML = `<p class="small"><b>Each side:</b></p><div class="plates">${r.perSide.map(([p, n]) => `<span>${n} × ${fw(p)}</span>`).join("") || `<span>Empty bar</span>`}</div>
-      ${!r.ok ? `<p class="err">${r.remainder > 0 ? fw(r.remainder) + " " + S.settings.unit + " per side can't be made with standard plates." : "Total is less than the bar."}</p>` : ""}`;
+    $("#pl-out").innerHTML = `<div class="sec">Each side</div><div class="plates">${r.perSide.map(([p, n]) => `<span>${n} × ${fw(p)}</span>`).join("") || `<span>Empty bar</span>`}</div>
+      ${!r.ok ? `<p class="err">${r.remainder > 0 ? fw(r.remainder) + " " + S.settings.unit + " per side can't be made with standard plates" : "Total is less than the bar"}</p>` : ""}`;
   }
 
   function download(name, text, type) {
@@ -719,13 +755,14 @@
 
   function saveRoutineModal(fromId) {
     const src = fromId ? S.sessions.find((x) => x.id === fromId) : active();
-    if (!src || !src.items.length) { modal(`<div class="mh"><h2>Nothing to save</h2></div><p>Add at least one exercise first.</p><button class="btn" data-act="close">OK</button>`, true); return; }
+    if (!src || !src.items.length) { notice("Nothing to save", "Add at least one exercise first"); return; }
     modal(`<div class="mh"><h2>Save as routine</h2></div>
-      <div class="form"><label class="wide">Routine name<input id="r-name" value="${esc(src.label || "")}" maxlength="60" placeholder="e.g. Upper A"></label></div>
-      <p class="muted small">${src.items.map((it) => esc(exById(it.exId).name)).join(" → ")}</p>
-      <div class="btnrow end"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="saveroutine-yes" data-id="${esc(src.id)}">Save</button></div>`, true);
-    setTimeout(() => { const f = $("#r-name"); if (f) f.focus(); }, 50);
+      <div class="form"><label class="wide">Name<input class="field" id="r-name" value="${esc(src.label || "")}" maxlength="60" placeholder="Upper A"></label></div>
+      <p class="note">${src.items.map((it) => esc(exById(it.exId).name)).join(", ")}</p>
+      <div class="ctabar"><button class="btn back" data-act="close">Cancel</button><button class="btn primary" data-act="saveroutine-yes" data-id="${esc(src.id)}">Save</button></div>`, true);
+    setTimeout(() => { const f = $("#r-name"); if (f && wide()) f.focus(); }, 50);
   }
+
 
   /* ---------- events ---------- */
   document.addEventListener("click", (e) => {
@@ -751,16 +788,16 @@
       case "sback": collectStep(); step = Math.max(0, step - 1); renderSurvey(); break;
       case "scancel": draft = null; view = "settings"; render(); break;
       case "survey": startSurvey(); break;
-      case "legal": modal(`<div class="mh"><h2>Disclaimer</h2><button class="iconbtn" data-act="close" aria-label="Close">×</button></div><div class="legal">${DISCLAIMER}</div>`); break;
-      case "hidetips": S.settings.tips = false; queue(); renderTips(); break;
+      case "legal": modal(`<div class="mh"><h2>Disclaimer</h2><button class="iconbtn" data-act="close" aria-label="Close">${ic("x")}</button></div><div class="legal">${DISCLAIMER}</div>`); break;
+      case "hidetips": S.settings.tips = false; queue(); render(); break;
       case "rackf": prefs.rack = b.dataset.v; savePrefs(); renderLib(); break;
       case "mine": prefs.mine = !prefs.mine; savePrefs(); renderLib(); if ($("#pkl")) renderPicker(); break;
       case "start": startSession(); render(); break;
       case "tstart": case "repeat": {
-        if (s) { modal(`<div class="mh"><h2>Session in progress</h2></div><p>Finish or discard the current session before starting another.</p><button class="btn" data-act="close">OK</button>`, true); break; }
+        if (s) { notice("Workout in progress", "Finish or discard the current workout before starting another"); break; }
         if (a === "tstart") { const t = S.templates.find((x) => x.id === b.dataset.id); if (t) startSession(t.exIds.filter((id) => ALL.some((x) => x.id === id)), t.name); }
         else { const src = S.sessions.find((x) => x.id === b.dataset.id); if (src) startSession(src.items.map((it) => it.exId).filter((id) => ALL.some((x) => x.id === id)), src.label); }
-        view = "train"; render(); break;
+        closeModal(); view = "train"; render(); window.scrollTo(0, 0); break;
       }
       case "add": addToSession(b.dataset.ex); break;
       case "picker": openPicker(b.dataset.at != null ? +b.dataset.at : null); break;
@@ -773,8 +810,8 @@
         if (LIB.some((x) => x.name.toLowerCase() === o.name.toLowerCase())) { $("#exErr").textContent = "An exercise with that name already exists."; break; }
         const ex = Object.assign({ id: "x-" + uid(), pattern: "" }, o);
         S.exercises.custom.push(ex); refreshLib(); queue();
-        if (pickAt === "lib") { pickAt = null; selEx = ex.id; closeModal(); render(); setSync("Added " + ex.name); }
-        else { addToSession(ex.id, pickAt); setSync("Added " + ex.name + " to your exercises"); }
+        if (pickAt === "lib") { pickAt = null; selEx = ex.id; exOpen = true; view = "exercises"; closeModal(); render(); toast("Added " + ex.name); }
+        else { addToSession(ex.id, pickAt); toast("Added " + ex.name + " to your exercises"); }
         break;
       }
       case "rmitem": s.items.splice(i, 1); queue(); render(); break;
@@ -785,6 +822,15 @@
         const c = s.items[i].sets[si]; c.done = !c.done;
         applyAuto(s); queue(); rerenderCard(i);
         if (c.done) startTimer(S.settings.restSec);
+        break;
+      }
+      case "rir": { const c = s.items[i].sets[si], v = +b.dataset.v; c.rir = c.rir === v ? null : v; applyAuto(s); queue(); rerenderCard(i); break; }
+      case "goalopen": openGoal[b.dataset.k] = !openGoal[b.dataset.k]; rerenderCard(i); break;
+      case "noteopen": {
+        openNote[b.dataset.k] = true; rerenderCard(i);
+        const card = document.querySelectorAll("#slots .card")[i];
+        const f = card && (b.dataset.k.startsWith("ex:") ? card.querySelector('[data-f="note"]') : card.querySelector(`[data-f="snote"][data-s="${b.dataset.k.split(":")[1]}"]`));
+        if (f) f.focus();
         break;
       }
       case "q": { const c = s.items[i].sets[si], v = +b.dataset.v; c.q = c.q === v ? null : v; c.bd = null; applyAuto(s); queue(); rerenderCard(i); break; }
@@ -798,30 +844,29 @@
       case "plates": openPlates(i, si); break;
       case "applyadv": { s.items[i].sets[si].w = +b.dataset.v; queue(); rerenderCard(i); break; }
       case "finish": {
-        if (!s.items.some((it) => it.sets.some((x) => x.done))) { modal(`<div class="mh"><h2>Nothing logged yet</h2></div><p>Tap <b>Log set</b> on at least one set before finishing, or discard the session.</p><button class="btn" data-act="close">OK</button>`, true); break; }
+        if (!s.items.some((it) => it.sets.some((x) => x.done))) { notice("Nothing logged yet", "Tap the check on at least one set before finishing, or discard the workout"); break; }
         s.items.forEach((it) => { it.sets = it.sets.filter((x) => x.done); });
         s.items = s.items.filter((it) => it.sets.length);
         s.status = "done"; s.ts = Date.now(); applyAuto(s); queue(); stopTimer(); render();
-        const st = sessionStats(s);
-        modal(`<div class="mh"><h2>${esc(s.label || "Session")} · ${fmtDate(s.date)}</h2><button class="iconbtn" data-act="close" aria-label="Close">×</button></div>
-          <p>${st.sets} working sets${st.targets ? ", " + st.hits + " of " + st.targets + " goals hit" : ""}${st.prs ? ", " + st.prs + " new PR" + (st.prs > 1 ? "s" : "") : ""}.</p>${logbookHTML(s)}`);
+        openSession(s.id, true);
         break;
       }
-      case "discard": confirmBox("Discard session?", "Everything logged in this session will be deleted. This can't be undone.", "discard-yes", "Discard"); break;
+      case "discard": confirmBox("Discard workout?", "Everything logged in this workout will be deleted. This can't be undone.", "discard-yes", "Discard"); break;
       case "discard-yes": S.sessions = S.sessions.filter((x) => x.id !== s.id); queue(); stopTimer(); closeModal(); render(); break;
       case "saveroutine": saveRoutineModal(b.dataset.id); break;
       case "saveroutine-yes": {
         const src = S.sessions.find((x) => x.id === b.dataset.id), name = ($("#r-name").value || "").trim() || src.label || "Routine";
-        S.templates.push({ id: "r-" + uid(), name, exIds: src.items.map((it) => it.exId) }); queue(); closeModal(); setSync("Saved routine " + name); render(); break;
+        S.templates.push({ id: "r-" + uid(), name, exIds: src.items.map((it) => it.exId) }); queue(); closeModal(); toast("Saved routine " + name); render(); break;
       }
       case "tdel": confirmBox("Delete routine?", "Your logged sessions are not affected.", "tdel-yes", "Delete", `data-id="${esc(b.dataset.id)}"`); break;
       case "tdel-yes": S.templates = S.templates.filter((t) => t.id !== b.dataset.id); queue(); closeModal(); render(); break;
-      case "rebuild": S.templates = S.templates.filter((t) => !t.id.startsWith("t-")).concat(RL.buildTemplates(LIB, S.profile)); queue(); render(); setSync("Starter routines rebuilt"); break;
-      case "view": { const ss = S.sessions.find((x) => x.id === b.dataset.id); modal(`<div class="mh"><h2>${esc(ss.label || "Session")} · ${fmtDate(ss.date)}</h2><button class="iconbtn" data-act="close" aria-label="Close">×</button></div>${logbookHTML(ss)}`); break; }
-      case "del": confirmBox("Delete session?", "This removes it from your history. Future goals will compare against the session before it.", "del-yes", "Delete", `data-id="${esc(b.dataset.id)}"`); break;
+      case "rebuild": S.templates = S.templates.filter((t) => !t.id.startsWith("t-")).concat(RL.buildTemplates(LIB, S.profile)); queue(); render(); toast("Starter routines rebuilt"); break;
+      case "view": openSession(b.dataset.id); break;
+      case "del": confirmBox("Delete workout?", "This removes it from your history. Future goals will compare against the session before it.", "del-yes", "Delete", `data-id="${esc(b.dataset.id)}"`); break;
       case "del-yes": S.sessions = S.sessions.filter((x) => x.id !== b.dataset.id); queue(); closeModal(); render(); break;
       case "close": case "close-bg": closeModal(); break;
-      case "selex": selEx = b.dataset.id; render(); break;
+      case "selex": selEx = b.dataset.id; exOpen = true; render(); if (!wide()) window.scrollTo(0, 0); break;
+      case "exback": exOpen = false; render(); break;
       case "saveex": {
         const o = readExForm($("#v-exercises")), ex = exById(selEx);
         if (!o.name) break;
@@ -831,7 +876,7 @@
           Object.keys(o).forEach((k) => { if ((o[k] ?? "") !== (orig[k] ?? "")) diff[k] = o[k]; });
           if (Object.keys(diff).length) S.exercises.edits[ex.id] = diff; else delete S.exercises.edits[ex.id];
         }
-        refreshLib(); queue(); render(); setSync("Saved " + o.name); break;
+        refreshLib(); queue(); render(); toast("Saved " + o.name); break;
       }
       case "resetex": delete S.exercises.edits[selEx]; refreshLib(); queue(); render(); break;
       case "delex": {
@@ -842,7 +887,7 @@
       case "delex-yes": {
         const ex = exById(selEx);
         if (ex.custom) S.exercises.custom = S.exercises.custom.filter((x) => x.id !== ex.id); else S.exercises.hidden.push(ex.id);
-        selEx = null; refreshLib(); queue(); closeModal(); render(); break;
+        selEx = null; exOpen = false; refreshLib(); queue(); closeModal(); render(); break;
       }
       case "unhide": S.exercises.hidden = []; refreshLib(); queue(); render(); break;
       case "setunit": S.settings.unit = b.dataset.v; queue(); render(); break;
@@ -863,7 +908,7 @@
         S = pendingImport; pendingImport = null;
         if (!S.consent) S.consent = keep.consent;
         if (!S.profile) S.profile = keep.profile;
-        refreshLib(); applyTheme(); queue(); closeModal(); render(); setSync("Backup imported");
+        refreshLib(); applyTheme(); queue(); closeModal(); render(); toast("Backup imported");
         break;
       }
     }
@@ -897,7 +942,7 @@
       const reader = new FileReader();
       reader.onload = () => {
         let parsed;
-        try { parsed = RL.normalizeState(JSON.parse(reader.result)); } catch (err) { modal(`<div class="mh"><h2>Import failed</h2></div><p>That file is not a valid Rep Ledger backup.</p><button class="btn" data-act="close">OK</button>`, true); return; }
+        try { parsed = RL.normalizeState(JSON.parse(reader.result)); } catch (err) { notice("Import failed", "That file is not a Rep Ledger backup"); return; }
         pendingImport = parsed;
         confirmBox("Replace all data?", `The backup has ${parsed.sessions.length} sessions, ${parsed.templates.length} routines and ${parsed.exercises.custom.length} custom exercises. Importing replaces everything currently stored.`, "import-yes", "Import");
       };
@@ -920,7 +965,7 @@
     if (el.id === "libSearch") { renderLib(); return; }
     if (el.id === "pkq") { renderPicker(); return; }
     if (el.id === "pl-total") { drawPlates(); return; }
-    if (el.id === "exsearch") { exQuery = el.value; const pos = el.selectionStart; renderExercises(); const n = $("#exsearch"); n.focus(); n.setSelectionRange(pos, pos); return; }
+    if (el.id === "exsearch") { exQuery = el.value; const pos = el.selectionStart; renderExercises(); const n = $("#exsearch"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } return; }
     if (el.id === "sessLabel") { active().label = el.value; queue(); return; }
     const f = el.dataset.f; if (!f) return;
     const s = active(); if (!s) return;
@@ -950,14 +995,15 @@
       const rows = document.querySelectorAll("#pkl .pkrow:not(.pkcreate)"), c = $("#pkl .pkcreate");
       if (rows.length === 1) rows[0].click(); else if (c && !rows.length) c.click();
     }
-    if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches('.exlist .row[role="button"]')) { e.preventDefault(); e.target.click(); }
   });
 
-  /* ---------- drag and drop ---------- */
+
+  /* ---------- drag and drop (desktop list into the workout, and reordering) ---------- */
   function initDnD() {
     if (!window.Sortable) return;
-    Sortable.create($("#lib"), { group: { name: "ex", pull: "clone", put: false }, sort: false, animation: 150, delay: 180, delayOnTouchOnly: true, filter: ".add", preventOnFilter: false });
-    Sortable.create($("#slots"), {
+    const lib = $("#lib"), slots = $("#slots");
+    if (lib && !Sortable.get(lib)) Sortable.create(lib, { group: { name: "ex", pull: "clone", put: false }, sort: false, animation: 150, filter: ".add", preventOnFilter: false });
+    if (slots && !Sortable.get(slots)) Sortable.create(slots, {
       group: { name: "ex", pull: false, put: true }, animation: 150, handle: ".handle", draggable: ".card", emptyInsertThreshold: 40,
       onAdd(ev) {
         const exId = ev.item.dataset.ex;
@@ -976,7 +1022,8 @@
   }
 
   window.addEventListener("pagehide", () => { if (dirty) { clearTimeout(flushTimer); flush(); } });
-  initDnD();
+  let lastWide = wide();
+  window.addEventListener("resize", () => { if (wide() !== lastWide) { lastWide = wide(); if (loaded) render(); } });
   connect();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 })();

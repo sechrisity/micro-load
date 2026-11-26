@@ -20,3 +20,4 @@ All notable changes to this project are documented here. The format follows [Kee
 - History statistics: sessions per week and month, week streak, sets per muscle group.
 - JSON backup export and import, CSV export, delete all data.
 - Optional HTTP Basic auth, strict security headers, non-root read-only container.
+- Native-style interface: bottom tab bar on phones and sidebar on desktop, compact set rows with RIR and quality rated after each set, bottom sheets, light and dark themes, system fonts only.
