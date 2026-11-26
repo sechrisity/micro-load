@@ -100,9 +100,11 @@ test("templates respect equipment and size", () => {
     for (const id of t.exIds) assert.ok(["dumbbell", "bodyweight"].includes(lib.find((e) => e.id === id).equip), id);
     assert.equal(new Set(t.exIds).size, t.exIds.length);
   }
-  const gym = RL.buildTemplates(lib, { equipment: RL.ALL_EQUIPMENT, days: 5, goal: "endurance", experience: "advanced" });
+  const gym = RL.buildTemplates(lib, { equipment: RL.ALL_EQUIPMENT, days: 5, goals: ["muscle", "endurance"], experience: "advanced" });
   assert.deepEqual(gym.map((t) => t.name), ["Push", "Pull", "Legs", "Conditioning"]);
   assert.equal(gym[0].exIds[0], "barbell-bench-press");
+  const strength = RL.buildTemplates(lib, { equipment: RL.ALL_EQUIPMENT, days: 4, goals: ["strength", "general"] });
+  assert.deepEqual(strength.map((t) => t.name), ["Upper", "Lower"]);
 });
 
 test("plate math", () => {

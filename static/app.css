@@ -213,6 +213,11 @@ main{padding-bottom:110px}
 .setno{width:auto;min-width:52px;white-space:nowrap}
 .sess-head input.label{width:min(100%,18ch)}
 #clearBox{display:flex;flex-direction:column;gap:10px}
+.rank{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;counter-reset:rk}
+.rank li{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 8px 6px 12px;counter-increment:rk}
+.rank li::before{content:counter(rk);font-family:var(--display);font-weight:800;background:var(--steel);color:var(--steel-ink);border-radius:6px;padding:0 7px}
+.rank .nm{flex:1;font-weight:600}
+.iconbtn:disabled{opacity:.3;cursor:default}
 body{margin:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 .btnrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .btnrow.end{justify-content:flex-end}

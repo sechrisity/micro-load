@@ -20,7 +20,7 @@
 
   /* ---------- state ---------- */
   let S = RL.emptyState();
-  let LIB = [], ALL = [];
+  let LIB = [], ALL = [], SORTED = []; // SORTED: alphabetical, for display. LIB order is the routine builder's preference order.
   let view = "train", selEx = null, exQuery = "", openBd = {}, loaded = false, serverMode = false;
   let draft = null, step = 0, pickAt = null, pickRegion = "all";
   let prefs = { rack: "all", mine: true };
@@ -28,7 +28,7 @@
   const savePrefs = () => { try { localStorage.setItem(PREFS, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
 
   const ctx = () => ({ unit: S.settings.unit, dist: S.settings.dist, goal: (S.profile && S.profile.goal) || "muscle" });
-  function refreshLib() { LIB = RL.buildLibrary(S.exercises); ALL = RL.buildLibrary(S.exercises, true); }
+  function refreshLib() { LIB = RL.buildLibrary(S.exercises); ALL = RL.buildLibrary(S.exercises, true); SORTED = LIB.slice().sort((a, b) => a.name.localeCompare(b.name)); }
   const exById = (id) => ALL.find((e) => e.id === id) || { id, name: "Removed exercise", group: "", region: "upper", equip: "other", measure: "total", pattern: "" };
   const have = () => new Set([...((S.profile && S.profile.equipment) || RL.ALL_EQUIPMENT), "bodyweight"]);
 
@@ -138,7 +138,8 @@
   function startSurvey() {
     const p = S.profile || {};
     draft = {
-      experience: p.experience || "", goal: p.goal || "", environment: p.environment || "",
+      experience: p.experience || "", goals: (p.goals || (p.goal ? [p.goal] : [])).slice(),
+      environments: (p.environments || (p.environment ? [p.environment] : [])).slice(),
       equipment: (p.equipment || []).slice(), days: p.days || "", unit: S.settings.unit, dist: S.settings.dist,
       readiness: (p.readiness || []).slice(), cleared: false, limitations: p.limitations || "", rebuild: true,
     };
@@ -148,6 +149,11 @@
   }
   const radios = (name, list, cur) => `<div class="opts">${list.map(([k, l, d]) => `<label class="opt"><input type="radio" name="${name}" value="${esc(k)}" ${cur === k ? "checked" : ""}><span><b>${esc(l)}</b>${d ? `<small>${esc(d)}</small>` : ""}</span></label>`).join("")}</div>`;
 
+  const checks = (name, list, cur) => `<div class="opts">${list.map(([k, l, d]) => `<label class="opt"><input type="checkbox" name="${name}" value="${esc(k)}" ${cur.includes(k) ? "checked" : ""}><span><b>${esc(l)}</b>${d ? `<small>${esc(d)}</small>` : ""}</span></label>`).join("")}</div>`;
+  const goalOrderHTML = (goals) => goals.length < 2 ? "" : `<div class="q-block"><b class="small">Priority order</b><ol class="rank">${goals.map((g, i) => `<li><span class="nm">${esc(label(GOALS, g))}</span>
+    <button class="iconbtn" data-act="gup" data-i="${i}" ${i === 0 ? "disabled" : ""} aria-label="Move ${esc(label(GOALS, g))} up">&uarr;</button>
+    <button class="iconbtn" data-act="gdown" data-i="${i}" ${i === goals.length - 1 ? "disabled" : ""} aria-label="Move ${esc(label(GOALS, g))} down">&darr;</button></li>`).join("")}</ol></div>`;
+
   function renderSurvey() {
     const d = draft, n = 5;
     const bar = `<div class="steps" aria-hidden="true">${Array.from({ length: n }, (_, i) => `<span class="${i <= step ? "on" : ""}"></span>`).join("")}</div>`;
@@ -155,11 +161,12 @@
     if (step === 0) {
       body = `<h2>About you</h2><p class="muted">This sets your starting rep ranges and how much help the app shows. You can change everything later.</p>
         <fieldset class="q-block"><legend>How long have you been training?</legend>${radios("experience", EXPERIENCE, d.experience)}</fieldset>
-        <fieldset class="q-block"><legend>What is your main goal?</legend>${radios("goal", GOALS, d.goal)}</fieldset>`;
+        <fieldset class="q-block"><legend>What are your main goals?</legend><p class="help">Pick one or more, then put them in order. Your top goal sets your rep ranges.</p>${checks("goals", GOALS, d.goals)}</fieldset>
+        <div id="goalOrder">${goalOrderHTML(d.goals)}</div>`;
     } else if (step === 1) {
       body = `<h2>Where you train</h2><p class="muted">The exercise rack shows what you can do with your equipment. Bodyweight exercises are always included.</p>
-        <fieldset class="q-block"><legend>Training environment</legend>${radios("environment", RL.ENVIRONMENTS.map(([k, l]) => [k, l]), d.environment)}</fieldset>
-        <fieldset class="q-block"><legend>Equipment you have access to</legend><p class="help">Picking an environment fills this in. Adjust it to match what you actually have.</p>
+        <fieldset class="q-block"><legend>Where do you train?</legend><p class="help">Pick every place you train.</p>${checks("environments", RL.ENVIRONMENTS.map(([k, l]) => [k, l]), d.environments)}</fieldset>
+        <fieldset class="q-block"><legend>Equipment you have access to</legend><p class="help">Your places fill this in. Adjust it to match what you actually have.</p>
         <div class="opts">${RL.EQUIPMENT.filter(([k]) => k !== "bodyweight").map(([k, l]) => `<label class="opt"><input type="checkbox" name="equipment" value="${k}" ${d.equipment.includes(k) ? "checked" : ""}><span><b>${esc(l)}</b></span></label>`).join("")}</div></fieldset>`;
     } else if (step === 2) {
       body = `<h2>Schedule and units</h2>
@@ -176,13 +183,14 @@
         <fieldset class="q-block"><legend>Injuries or limitations (optional)</legend><p class="help">A private note for yourself, shown on the Settings page. The app does not change your plan based on it.</p>
         <textarea class="field" name="limitations" rows="2" maxlength="500">${esc(d.limitations)}</textarea></fieldset>`;
     } else {
-      const tmpl = RL.buildTemplates(LIB, d);
+      const tmpl = RL.buildTemplates(LIB, Object.assign({}, d, { goal: d.goals[0] }));
       const rng = (g) => RL.RANGES[g] || RL.RANGES.muscle;
       body = `<h2>Your setup</h2>
         <dl class="kv">
           <dt>Experience</dt><dd>${esc(label(EXPERIENCE, d.experience))}</dd>
-          <dt>Goal</dt><dd>${esc(label(GOALS, d.goal))}</dd>
-          <dt>Rep ranges</dt><dd>${rng(d.goal)[0].join("-")} on compound lifts, ${rng(d.goal)[1].join("-")} on isolation work</dd>
+          <dt>Goals</dt><dd>${d.goals.map((g, i) => (i + 1) + ". " + esc(label(GOALS, g))).join("<br>")}</dd>
+          <dt>Places</dt><dd>${d.environments.map((k) => esc(label(RL.ENVIRONMENTS, k))).join(", ")}</dd>
+          <dt>Rep ranges</dt><dd>${rng(d.goals[0])[0].join("-")} on compound lifts, ${rng(d.goals[0])[1].join("-")} on isolation work</dd>
           <dt>Equipment</dt><dd>${d.equipment.length ? d.equipment.map((k) => esc(label(RL.EQUIPMENT, k))).join(", ") : "Bodyweight only"}</dd>
           <dt>Exercises available</dt><dd>${LIB.filter((e) => new Set([...d.equipment, "bodyweight"]).has(e.equip)).length} of ${LIB.length}</dd>
           <dt>Starter routines</dt><dd>${tmpl.map((t) => esc(t.name)).join(", ") || "None"}</dd>
@@ -201,11 +209,11 @@
     const f = $("#v-onboard");
     const val = (n) => (f.querySelector(`input[name="${n}"]:checked`) || {}).value || "";
     const d = draft;
-    if (step === 0) { d.experience = val("experience"); d.goal = val("goal"); if (!d.experience || !d.goal) return "Answer both questions to continue."; }
+    if (step === 0) { d.experience = val("experience"); if (!d.experience || !d.goals.length) return "Pick your experience and at least one goal."; }
     if (step === 1) {
-      d.environment = val("environment");
+      d.environments = [...f.querySelectorAll('input[name="environments"]:checked')].map((x) => x.value);
       d.equipment = [...f.querySelectorAll('input[name="equipment"]:checked')].map((x) => x.value);
-      if (!d.environment) return "Pick the environment closest to where you train.";
+      if (!d.environments.length) return "Pick at least one place you train.";
     }
     if (step === 2) { d.days = val("days"); d.unit = val("unit"); d.dist = val("dist"); if (!d.days || !d.unit || !d.dist) return "Answer all three questions to continue."; }
     if (step === 3) {
@@ -222,7 +230,7 @@
   function finishSurvey() {
     const d = draft, first = !S.profile;
     S.profile = {
-      experience: d.experience, goal: d.goal, environment: d.environment, equipment: d.equipment, days: Number(d.days),
+      experience: d.experience, goals: d.goals, goal: d.goals[0], environments: d.environments, equipment: d.equipment, days: Number(d.days),
       readiness: d.readiness, readinessFlag: d.readiness.includes("yes"), limitations: d.limitations.trim(),
       completedAt: new Date().toISOString(),
     };
@@ -334,7 +342,7 @@
     const q = ($("#libSearch").value || "").toLowerCase().trim();
     const s = active(), inS = new Set(s ? s.items.map((i) => i.exId) : []);
     $("#rackf").innerHTML = regionChips(prefs.rack, "rackf") + `<button class="chip ${prefs.mine ? "on" : ""}" data-act="mine" aria-pressed="${prefs.mine}">My equipment</button>`;
-    const list = LIB.filter((e) => rackMatch(e, prefs.rack, prefs.mine, q));
+    const list = SORTED.filter((e) => rackMatch(e, prefs.rack, prefs.mine, q));
     $("#lib").innerHTML = list.map((e) => `<li data-ex="${esc(e.id)}" class="${inS.has(e.id) ? "in-session" : ""}"><div class="nm">${esc(e.name)}<div class="grp">${esc(e.group)} · ${esc(rangeText(e))} · ${esc(RL.wUnit(e, ctx()))}</div></div><button class="add" data-act="add" data-ex="${esc(e.id)}" aria-label="Add ${esc(e.name)}">+</button></li>`).join("")
       || `<li class="muted">No match. Use "+ Add exercise" to create it.</li>`;
   }
@@ -448,7 +456,7 @@
     const q = ($("#pkq") ? $("#pkq").value : "").trim(), ql = q.toLowerCase();
     const s = active(), inS = new Set(s ? s.items.map((i) => i.exId) : []);
     $("#pkf").innerHTML = regionChips(pickRegion, "pkf") + `<button class="chip ${prefs.mine ? "on" : ""}" data-act="mine" aria-pressed="${prefs.mine}">My equipment</button>`;
-    const list = LIB.filter((e) => rackMatch(e, pickRegion, prefs.mine, ql));
+    const list = SORTED.filter((e) => rackMatch(e, pickRegion, prefs.mine, ql));
     const exact = LIB.some((e) => e.name.toLowerCase() === ql);
     const create = q && !exact ? `<button class="pkrow pkcreate" data-act="newex" data-name="${esc(q)}"><span class="nm">Create "${esc(q)}"</span><span class="muted">Set its muscle group, equipment and how it's measured</span></button>` : "";
     $("#pkl").innerHTML = create + (list.map((e) => `<button class="pkrow" data-act="pkadd" data-ex="${esc(e.id)}"><span class="nm">${esc(e.name)}</span><span class="muted">${esc(e.group)} · ${esc(label(RL.EQUIPMENT, e.equip))}</span>${inS.has(e.id) ? `<span class="tag">In session</span>` : ""}</button>`).join("")
@@ -550,10 +558,10 @@
 
   /* ---------- exercises ---------- */
   function renderExercises() {
-    if (!selEx || !LIB.find((e) => e.id === selEx)) selEx = LIB[0] ? LIB[0].id : null;
+    if (!selEx || !LIB.find((e) => e.id === selEx)) selEx = SORTED[0] ? SORTED[0].id : null;
     const ex = selEx ? exById(selEx) : null, c0 = ctx();
     const q = exQuery.toLowerCase();
-    const rows = LIB.filter((e) => !q || e.name.toLowerCase().includes(q) || e.group.toLowerCase().includes(q) || e.equip.includes(q));
+    const rows = SORTED.filter((e) => !q || e.name.toLowerCase().includes(q) || e.group.toLowerCase().includes(q) || e.equip.includes(q));
     const hist = ex ? doneSessions().slice().reverse().map((s) => {
       const it = s.items.find((i) => i.exId === ex.id); if (!it) return null;
       const sets = workingDone(it.sets).filter((x) => x.r != null); if (!sets.length) return null;
@@ -602,8 +610,8 @@
     const hiddenN = S.exercises.hidden.length, customN = S.exercises.custom.length;
     $("#v-settings").innerHTML = `<div class="settings">
       <div class="panel"><h2>Profile</h2>
-        <dl class="kv"><dt>Experience</dt><dd>${esc(label(EXPERIENCE, p.experience))}</dd><dt>Goal</dt><dd>${esc(label(GOALS, p.goal))}</dd>
-        <dt>Environment</dt><dd>${esc(label(RL.ENVIRONMENTS, p.environment))}</dd><dt>Days a week</dt><dd>${esc(p.days)}</dd>
+        <dl class="kv"><dt>Experience</dt><dd>${esc(label(EXPERIENCE, p.experience))}</dd><dt>Goals</dt><dd>${(p.goals || [p.goal]).map((g, i) => (i + 1) + ". " + esc(label(GOALS, g))).join("<br>")}</dd>
+        <dt>Places</dt><dd>${(p.environments || [p.environment]).map((k) => esc(label(RL.ENVIRONMENTS, k))).join(", ")}</dd><dt>Days a week</dt><dd>${esc(p.days)}</dd>
         <dt>Equipment</dt><dd>${p.equipment.length ? p.equipment.map((k) => esc(label(RL.EQUIPMENT, k).replace(/ \(.*\)/, ""))).join(", ") : "Bodyweight only"}</dd>
         ${p.limitations ? `<dt>Limitations</dt><dd>${esc(p.limitations)}</dd>` : ""}</dl>
         ${p.readinessFlag ? `<div class="notice">Your health check flagged at least one item. Keep your physician or qualified professional in the loop as you train.</div>` : ""}
@@ -712,6 +720,11 @@
         const err = collectStep();
         if (err) { $("#surveyErr").textContent = err; break; }
         if (step === 4) finishSurvey(); else { step++; renderSurvey(); window.scrollTo(0, 0); }
+        break;
+      }
+      case "gup": case "gdown": {
+        const g = draft.goals, k = +b.dataset.i, j = a === "gup" ? k - 1 : k + 1;
+        if (j >= 0 && j < g.length) { [g[k], g[j]] = [g[j], g[k]]; $("#goalOrder").innerHTML = goalOrderHTML(g); }
         break;
       }
       case "sback": collectStep(); step = Math.max(0, step - 1); renderSurvey(); break;
@@ -836,9 +849,17 @@
   document.addEventListener("change", (e) => {
     const el = e.target;
     if (el.id === "c-agree" || el.id === "c-age") { $("#consentBtn").disabled = !($("#c-agree").checked && $("#c-age").checked); return; }
-    if (el.name === "environment" && draft) {
-      const env = RL.ENVIRONMENTS.find(([k]) => k === el.value);
-      if (env) document.querySelectorAll('input[name="equipment"]').forEach((x) => { x.checked = env[2].includes(x.value); });
+    if (draft && $("#surveyErr")) $("#surveyErr").textContent = "";
+    if (el.name === "environments" && draft) {
+      const picked = [...document.querySelectorAll('input[name="environments"]:checked')].map((x) => x.value);
+      const kit = new Set(RL.ENVIRONMENTS.filter(([k]) => picked.includes(k)).flatMap(([, , eq]) => eq));
+      document.querySelectorAll('input[name="equipment"]').forEach((x) => { x.checked = kit.has(x.value); });
+      return;
+    }
+    if (el.name === "goals" && draft) {
+      if (el.checked && !draft.goals.includes(el.value)) draft.goals.push(el.value);
+      if (!el.checked) draft.goals = draft.goals.filter((g) => g !== el.value);
+      $("#goalOrder").innerHTML = goalOrderHTML(draft.goals);
       return;
     }
     if (/^rq\d$/.test(el.name) && draft) {

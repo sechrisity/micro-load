@@ -210,7 +210,8 @@
     let split = days <= 3 ? [["Full Body A", "fullA"], ["Full Body B", "fullB"]]
       : days === 4 ? [["Upper", "upper"], ["Lower", "lower"]]
       : [["Push", "push"], ["Pull", "pull"], ["Legs", "legs"]];
-    if (profile.goal === "endurance" || profile.goal === "general") split = split.concat([["Conditioning", "conditioning"]]);
+    const goals = profile.goals || [profile.goal];
+    if (goals.includes("endurance") || goals[0] === "general") split = split.concat([["Conditioning", "conditioning"]]);
     const max = profile.experience === "new" ? 5 : 7;
     return split.map(([name, key]) => {
       const used = new Set();
