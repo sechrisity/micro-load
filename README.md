@@ -26,7 +26,7 @@ Rep Ledger runs as a single small container or as plain static files. It install
 | Area | What you get |
 |---|---|
 | Onboarding | Disclaimer acceptance, then a short survey: experience, goals in priority order, every place you train, equipment, schedule, units and a pre-exercise health check |
-| Exercise library | About 190 built-in exercises covering barbell, dumbbell, kettlebell, cable, machine, Smith machine, bands, bodyweight, core and cardio, listed alphabetically. Variants are separate entries (for example plate-loaded and selectorized leg press). Filter by region or by the equipment you have |
+| Exercise library | 223 built-in exercises covering barbell, dumbbell, kettlebell, cable, machine, Smith machine, bands, bodyweight, core and cardio, listed alphabetically. Variants are separate entries (for example plate-loaded and selectorized leg press). Filter by region or by the equipment you have |
 | Custom exercises | Create your own from any search box or the Exercises tab. Edit name, muscle group, equipment, rep range, microload and setup cues on any exercise |
 | Starter routines | Generated from your schedule and equipment (full body, upper/lower, or push/pull/legs, plus conditioning for endurance goals). Save any session as your own routine |
 | Session logging | Drag exercises in order, insert one between any two exercises, reorder by dragging. Each set shows last session's numbers and today's target |

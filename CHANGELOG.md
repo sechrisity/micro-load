@@ -10,7 +10,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - First public release, generalised from a single-user personal build.
 - Disclaimer acceptance gate and onboarding survey (experience, ranked goals, multiple training places, equipment, schedule, units, health check).
-- Built-in library of about 190 exercises, listed alphabetically with equipment filtering, plus custom exercises and per-exercise edits.
+- Built-in library of 223 exercises, listed alphabetically with equipment filtering, plus custom exercises and per-exercise edits.
 - Starter routines generated from schedule and equipment; save any session as a routine.
 - Insert an exercise between any two exercises in a session.
 - Measures for per-side, per-dumbbell, pin or setting, bodyweight, timed holds and cardio.
