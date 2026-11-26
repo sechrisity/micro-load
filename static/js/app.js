@@ -824,7 +824,7 @@
         <button class="row accent" data-act="export">Export backup</button><button class="row accent" data-act="csv">Export sets as CSV</button>
         <label class="row accent filebtn">Import backup<input type="file" id="importFile" accept="application/json,.json" hidden></label>
         <button class="row danger" data-act="wipe">Delete all data</button></div>`, serverMode ? "" : "Clearing this browser's site data deletes your log. Export a backup regularly")
-      + sec("About", `<div class="group"><div class="row"><span class="body credit">Inspired by <a href="https://www.instagram.com/trainingbyjp/" target="_blank" rel="noopener noreferrer">@trainingbyjp</a> and his approach to training: log every set against last time, judge how well you moved, and take one small step forward. Micro Load is independent and not affiliated with or endorsed by him.</span></div>
+      + sec("About", `<div class="group"><div class="row"><span class="body credit">Inspired by JP (<a href="https://www.instagram.com/jordanpetersjp/" target="_blank" rel="noopener noreferrer">@jordanpetersjp</a>) and his approach to training: log every set against last time, judge how well you moved, and take one small step forward. Micro Load is independent and not affiliated with or endorsed by him.</span></div>
         ${personal ? "" : rowBtn("legal", "", "Disclaimer", S.consent ? "Accepted " + esc(new Date(S.consent.acceptedAt).toLocaleDateString()) : "", "")}
         <div class="row"><span class="body"><span class="t">Version</span></span><span class="end">${VERSION}</span></div></div>`, "Free and open source under the MIT License")
       + `</div>`;

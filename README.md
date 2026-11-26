@@ -255,7 +255,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Acknowledgements
 
-The training approach behind Micro Load was inspired by [@trainingbyjp](https://www.instagram.com/trainingbyjp/) on Instagram: track every set against last session, judge the quality of the work and not only the numbers, and earn each progression one small step at a time. If you lift, his content is worth your time. Micro Load is an independent project and is not affiliated with or endorsed by him.
+The training approach behind Micro Load was inspired by JP ([@jordanpetersjp](https://www.instagram.com/jordanpetersjp/)) on Instagram: track every set against last session, judge the quality of the work and not only the numbers, and earn each progression one small step at a time. If you lift, his content is worth your time. Micro Load is an independent project and is not affiliated with or endorsed by him.
 
 Drag and drop uses [SortableJS](https://github.com/SortableJS/Sortable). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
