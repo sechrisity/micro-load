@@ -386,8 +386,9 @@
   }
 
   // Library = built-ins (minus hidden, with user edits) + custom exercises.
-  function buildLibrary(exState, includeHidden) {
+  function buildLibrary(exState, includeHidden, includeBuiltins) {
     const st = exState || {};
+    if (includeBuiltins === false) return (st.custom || []).map((e) => Object.assign({}, e, { custom: true }));
     const hidden = new Set(st.hidden || []);
     const edits = st.edits || {};
     const base = RL.EXERCISES.filter((e) => includeHidden || !hidden.has(e.id))
@@ -398,7 +399,7 @@
   function emptyState() {
     return {
       schema: 1, updatedAt: 0, consent: null, profile: null,
-      settings: { unit: "lb", dist: "km", restSec: 120, tips: true, theme: "auto", adaptive: true, targetRir: 1 },
+      settings: { unit: "lb", dist: "km", restSec: 120, tips: true, theme: "auto", adaptive: true, advice: true, builtins: true, targetRir: 1 },
       exercises: { custom: [], edits: {}, hidden: [] },
       templates: [], sessions: [], goals: [],
     };
@@ -425,7 +426,7 @@
         if (!e || !e.id || known.has(e.id)) return;
         s.exercises.custom.push({
           id: e.id, name: e.name || "Exercise", group: e.group || "", region: e.region || "upper",
-          equip: "other", measure: OLD_MEASURE[e.measure] || e.measure || "total", pattern: "",
+          equip: "other", legacy: true, measure: OLD_MEASURE[e.measure] || e.measure || "total", pattern: "",
           repMin: e.repMin, repMax: e.repMax, inc: e.inc,
         });
       });

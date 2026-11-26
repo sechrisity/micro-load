@@ -23,6 +23,8 @@ KEEP_BACKUPS = int(os.environ.get("REPLEDGER_BACKUPS", "30"))
 MAX_BODY = 20_000_000
 USER = os.environ.get("REPLEDGER_USER", "repledger")
 PASSWORD = os.environ.get("REPLEDGER_PASSWORD", "")
+# Personal mode: one known user, so no disclaimer gate, no survey and no built-in library by default.
+PERSONAL = os.environ.get("REPLEDGER_PERSONAL", "").lower() in ("1", "true", "yes")
 
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
        "connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; "
@@ -70,6 +72,11 @@ async def guard(request: Request, call_next):
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/api/config")
+def config():
+    return {"personal": PERSONAL}
 
 
 @app.get("/api/state")

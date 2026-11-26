@@ -229,3 +229,8 @@ test("month grid starts on Monday", () => {
   assert.equal(cells[6], "2026-11-01");
   assert.equal(cells.filter(Boolean).length, 30);
 });
+
+test("library can leave out the built-ins", () => {
+  const lib = RL.buildLibrary({ custom: [{ id: "x1", name: "Mine", measure: "total" }] }, false, false);
+  assert.deepEqual(lib.map((e) => e.id), ["x1"]);
+});

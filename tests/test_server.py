@@ -6,9 +6,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-def make_client(tmp_path, monkeypatch, password=""):
+def make_client(tmp_path, monkeypatch, password="", personal=""):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("REPLEDGER_PASSWORD", password)
+    monkeypatch.setenv("REPLEDGER_PERSONAL", personal)
     import server
     importlib.reload(server)
     return TestClient(server.app), server
@@ -73,3 +74,10 @@ def test_password_required_when_set(tmp_path, monkeypatch, path):
 def test_health_is_open(tmp_path, monkeypatch):
     client, _ = make_client(tmp_path, monkeypatch, password="s3cret")
     assert client.get("/api/health").json() == {"ok": True}
+
+
+def test_config_reports_personal_mode(tmp_path, monkeypatch):
+    client, _ = make_client(tmp_path, monkeypatch)
+    assert client.get("/api/config").json() == {"personal": False}
+    client, _ = make_client(tmp_path, monkeypatch, personal="1")
+    assert client.get("/api/config").json() == {"personal": True}

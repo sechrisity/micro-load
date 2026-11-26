@@ -73,6 +73,7 @@ All settings are environment variables. The container reads them from `.env` thr
 | `REPLEDGER_USER` | `repledger` | Basic auth username |
 | `DATA_DIR` | `/data` | Where `state.json` and daily backups are written |
 | `REPLEDGER_BACKUPS` | `30` | Number of daily backups to keep |
+| `REPLEDGER_PERSONAL` | empty | Set to `1` for a single owner who runs it for themselves: skips the disclaimer and survey, hides the built-in library by default, and offers 3, 4 and 5 minute rest timers |
 
 Everything else (units, rest timer, theme, tips, routines, equipment) is set in the app under **Settings**.
 

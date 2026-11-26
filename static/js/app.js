@@ -40,13 +40,13 @@
   let view = "train", selEx = null, exQuery = "", openBd = {}, loaded = false, serverMode = false;
   let draft = null, step = 0, pickAt = null, pickRegion = "all";
   let exOpen = false, openGoal = {}, openNote = {}, syncText = "";
-  let goalFilter = "all", goalDraft = null, calMonth = null;
+  let goalFilter = "all", goalDraft = null, calMonth = null, personal = false;
   let prefs = { rack: "all", mine: true };
   try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS) || "{}")); } catch (e) { /* defaults */ }
   const savePrefs = () => { try { localStorage.setItem(PREFS, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
 
   const ctx = () => ({ unit: S.settings.unit, dist: S.settings.dist, goal: (S.profile && S.profile.goal) || "muscle" });
-  function refreshLib() { LIB = RL.buildLibrary(S.exercises); ALL = RL.buildLibrary(S.exercises, true); SORTED = LIB.slice().sort((a, b) => a.name.localeCompare(b.name)); }
+  function refreshLib() { LIB = RL.buildLibrary(S.exercises, false, S.settings.builtins !== false); ALL = RL.buildLibrary(S.exercises, true); SORTED = LIB.slice().sort((a, b) => a.name.localeCompare(b.name)); }
   const exById = (id) => ALL.find((e) => e.id === id) || { id, name: "Removed exercise", group: "", region: "upper", equip: "other", measure: "total", pattern: "" };
   const have = () => new Set([...((S.profile && S.profile.equipment) || RL.ALL_EQUIPMENT), "bodyweight"]);
 
@@ -91,6 +91,7 @@
       const r = await fetch("api/state", { cache: "no-store" });
       if (r.ok && (r.headers.get("content-type") || "").includes("json")) {
         serverMode = true;
+        try { const c = await (await fetch("api/config", { cache: "no-store" })).json(); personal = !!c.personal; prefs.personal = personal; savePrefs(); } catch (e) { /* older server */ }
         prefs.server = true; savePrefs();
         const srv = await r.json();
         const useLocal = localD && (localD.updatedAt || 0) > (srv.updatedAt || 0);
@@ -102,11 +103,20 @@
       }
     } catch (e) { /* no server: offline or static hosting */ }
     if (prefs.server && localD) serverMode = true;
+    personal = !!prefs.personal;
     S = RL.normalizeState(localD);
     setSync(serverMode ? "Offline: saved on this device, will sync" : "Saved on this device");
     finishLoad();
   }
+  // Personal mode: the owner runs it for themselves, so skip the gate and survey and use their defaults once.
+  function applyPersonal() {
+    if (!personal) return;
+    if (!S.consent) S.consent = { version: CONSENT_VERSION, acceptedAt: new Date().toISOString(), personal: true };
+    if (!S.profile) S.profile = { experience: "advanced", goals: ["muscle"], goal: "muscle", environments: ["commercial"], equipment: RL.ALL_EQUIPMENT.slice(), days: 4, readiness: [], limitations: "", personal: true };
+    if (!S.settings.personalInit) Object.assign(S.settings, { personalInit: true, tips: false, adaptive: false, advice: false, builtins: false, restSec: 180 });
+  }
   function finishLoad() {
+    applyPersonal();
     refreshLib();
     applyTheme();
     loaded = true;
@@ -363,6 +373,8 @@
     else if (view === "exercises") renderExercises();
     else renderSettings();
   }
+  // Equipment label; exercises migrated from the original app have no real equipment, so show none.
+  const eqName = (e) => (e.legacy ? "" : label(RL.EQUIPMENT, e.equip).replace(/ \(.*\)/, ""));
   const plural = (n, w) => n + " " + w + (n === 1 ? "" : "s");
   const fig = (w, r, ex) => `${fw(w)} × ${r ?? "-"}`;
   const navHTML = (title, sub, acts) => `<header class="nav"><h1>${title}${sub ? `<span class="sub">${sub}</span>` : ""}</h1>${acts ? `<div class="acts">${acts}</div>` : ""}</header>`;
@@ -373,7 +385,7 @@
     const q = ($("#libSearch").value || "").toLowerCase().trim();
     const s = active(), inS = new Set(s ? s.items.map((i) => i.exId) : []);
     $("#rackf").innerHTML = regionChips(prefs.rack, "rackf") + `<button class="chip ${prefs.mine ? "on" : ""}" data-act="mine" aria-pressed="${prefs.mine}">My equipment</button>`;
-    lib.innerHTML = SORTED.filter((e) => rackMatch(e, prefs.rack, prefs.mine, q)).map((e) => `<li data-ex="${esc(e.id)}" class="${inS.has(e.id) ? "in-session" : ""}"><div class="nm">${esc(e.name)}<div class="grp">${esc(e.group)} · ${esc(label(RL.EQUIPMENT, e.equip).replace(/ \(.*\)/, ""))}</div></div><button class="iconbtn add" data-act="add" data-ex="${esc(e.id)}" aria-label="Add ${esc(e.name)}">${ic("plus")}</button></li>`).join("")
+    lib.innerHTML = SORTED.filter((e) => rackMatch(e, prefs.rack, prefs.mine, q)).map((e) => `<li data-ex="${esc(e.id)}" class="${inS.has(e.id) ? "in-session" : ""}"><div class="nm">${esc(e.name)}<div class="grp">${esc([e.group, eqName(e)].filter(Boolean).join(" · "))}</div></div><button class="iconbtn add" data-act="add" data-ex="${esc(e.id)}" aria-label="Add ${esc(e.name)}">${ic("plus")}</button></li>`).join("")
       || `<li class="muted">No match</li>`;
   }
   const tipsHTML = () => S.settings.tips ? `<div class="tips"><b class="h">How it works</b><ul>
@@ -419,7 +431,7 @@
       ? `Last · ${fmtDate(last.s.date)}: ` + last.it.sets.map((x) => `<b>${fig(x.w, x.r)}</b>${x.rir != null ? " @" + x.rir : ""}${x.q != null ? " (" + x.q + "/10)" : ""}`).join(" · ")
       : "First time logging this exercise. Today sets your baseline";
     return `<li class="card" data-uid="${it.uid}">
-      <div class="card-h"><span class="handle" title="Drag to reorder" aria-hidden="true">${ic("grip")}</span><div class="ttl"><div class="nm">${esc(ex.name)}</div><div class="meta">${esc(rangeText(ex))} · ${esc(label(RL.EQUIPMENT, ex.equip).replace(/ \(.*\)/, ""))}</div></div><button class="iconbtn" data-act="rmitem" data-i="${i}" aria-label="Remove ${esc(ex.name)}">${ic("x")}</button></div>
+      <div class="card-h"><span class="handle" title="Drag to reorder" aria-hidden="true">${ic("grip")}</span><div class="ttl"><div class="nm">${esc(ex.name)}</div><div class="meta">${esc([rangeText(ex), eqName(ex)].filter(Boolean).join(" · "))}</div></div><button class="iconbtn" data-act="rmitem" data-i="${i}" aria-label="Remove ${esc(ex.name)}">${ic("x")}</button></div>
       ${ex.cues ? `<details class="cues"><summary>Cues</summary>${esc(ex.cues)}</details>` : ""}
       <div class="lastline">${lastTxt}</div>
       <div class="sets">${it.sets.map((c, si) => setHTML(it, ex, c, si, wi[si], last && wi[si] >= 0 ? last.it.sets[wi[si]] : null, i, prior, c0, adviceFor(it, si, ex, c0))).join("")}</div>
@@ -432,7 +444,7 @@
   // Advice for set si from the most recent logged working set before it in the same exercise.
   function adviceFor(it, si, ex, c0) {
     const c = it.sets[si];
-    if (c.done || c.warm) return null;
+    if (c.done || c.warm || S.settings.advice === false) return null;
     for (let j = si - 1; j >= 0; j--) {
       const x = it.sets[j];
       if (x.warm) continue;
@@ -515,7 +527,7 @@
     const list = SORTED.filter((e) => rackMatch(e, pickRegion, prefs.mine, ql));
     const exact = LIB.some((e) => e.name.toLowerCase() === ql);
     const create = q && !exact ? `<div class="group"><button class="row accent pkcreate" data-act="newex" data-name="${esc(q)}">${ic("plus")}<span class="body"><span class="t">Create "${esc(q)}"</span></span></button></div><div class="sec"></div>` : "";
-    $("#pkl").innerHTML = create + (list.length ? `<div class="group">${list.map((e) => `<button class="row pkrow" data-act="pkadd" data-ex="${esc(e.id)}"><span class="body"><span class="t">${esc(e.name)}</span><span class="d">${esc(e.group)} · ${esc(label(RL.EQUIPMENT, e.equip).replace(/ \(.*\)/, ""))}</span></span>${inS.has(e.id) ? `<span class="badge">In workout</span>` : ""}</button>`).join("")}</div>`
+    $("#pkl").innerHTML = create + (list.length ? `<div class="group">${list.map((e) => `<button class="row pkrow" data-act="pkadd" data-ex="${esc(e.id)}"><span class="body"><span class="t">${esc(e.name)}</span><span class="d">${esc([e.group, eqName(e)].filter(Boolean).join(" · "))}</span></span>${inS.has(e.id) ? `<span class="badge">In workout</span>` : ""}</button>`).join("")}</div>`
       : q ? "" : `<p class="note">Nothing here with your equipment. Turn off My equipment to see everything.</p>`);
   }
 
@@ -735,7 +747,7 @@
     rows.forEach((e, n) => {
       const L = e.name[0].toUpperCase();
       if (L !== letter) { listHTML += (n ? "</div>" : "") + `<div class="letter">${esc(L)}</div><div class="group">`; letter = L; }
-      listHTML += `<button class="row ${e.id === selEx && split ? "sel" : ""}" data-act="selex" data-id="${esc(e.id)}"><span class="body"><span class="t">${esc(e.name)}</span><span class="d">${esc(e.group)} · ${esc(label(RL.EQUIPMENT, e.equip).replace(/ \(.*\)/, ""))}</span></span><span class="end">${e.custom ? `<span class="badge">Custom</span>` : ""}${ic("chev", "sm chev")}</span></button>`;
+      listHTML += `<button class="row ${e.id === selEx && split ? "sel" : ""}" data-act="selex" data-id="${esc(e.id)}"><span class="body"><span class="t">${esc(e.name)}</span><span class="d">${esc([e.group, eqName(e)].filter(Boolean).join(" · "))}</span></span><span class="end">${e.custom ? `<span class="badge">Custom</span>` : ""}${ic("chev", "sm chev")}</span></button>`;
     });
     if (rows.length) listHTML += "</div>";
     const list = `<div class="exlist">${navHTML("Exercises", LIB.length + " in your library", `<button class="btn tint sm" data-act="newex">${ic("plus", "sm")}New</button>`)}
@@ -755,7 +767,7 @@
     }).filter(Boolean);
     const edited = ex.builtin && S.exercises.edits[ex.id];
     return `<button class="backlink" data-act="exback">${ic("chevleft")}Exercises</button>
-      ${navHTML(esc(ex.name), esc(ex.group) + " · " + esc(label(RL.EQUIPMENT, ex.equip).replace(/ \(.*\)/, "")) + " · " + esc(rangeText(ex)))}
+      ${navHTML(esc(ex.name), esc([ex.group, eqName(ex), rangeText(ex)].filter(Boolean).join(" · ")))}
       <div class="sec">Progress</div>${chartHTML(hist, ex, c0)}
       ${hist.length ? `<div class="sec">Sessions</div><div class="tablewrap"><table class="h"><thead><tr><th>Date</th><th>Best set</th><th>${esc(RL.metricLabel(ex, c0))}</th><th>Quality</th></tr></thead><tbody>${hist.slice().reverse().map((h) => `<tr><td>${fmtDate(h.s.date)}</td><td class="n">${fig(h.best.w, h.best.r)}</td><td class="n">${fw(h.m.toFixed(1))}</td><td class="n">${h.q != null ? h.q.toFixed(1) : "-"}</td></tr>`).join("")}</tbody></table></div>` : ""}
       <div class="sec">Details</div><div class="panel">${exFormHTML(ex, false)}</div>
@@ -792,27 +804,27 @@
     const hiddenN = S.exercises.hidden.length, customN = S.exercises.custom.length;
     const sec = (title, body, note) => `<div><div class="sec">${title}</div>${body}${note ? `<p class="note">${note}</p>` : ""}</div>`;
     $("#v-settings").innerHTML = navHTML("Settings") + `<div class="settings">`
-      + sec("Profile", `<div class="group"><dl class="kv"><dt>Experience</dt><dd>${esc(label(EXPERIENCE, p.experience))}</dd>
+      + (personal ? "" : sec("Profile", `<div class="group"><dl class="kv"><dt>Experience</dt><dd>${esc(label(EXPERIENCE, p.experience))}</dd>
         <dt>Goals</dt><dd>${(p.goals || [p.goal]).map((g, i) => (i + 1) + ". " + esc(label(GOALS, g))).join("<br>")}</dd>
         <dt>Places</dt><dd>${(p.environments || [p.environment]).map((k) => esc(label(RL.ENVIRONMENTS, k))).join(", ")}</dd>
         <dt>Days a week</dt><dd>${esc(p.days)}</dd>
         <dt>Equipment</dt><dd>${p.equipment.length ? p.equipment.map((k) => esc(label(RL.EQUIPMENT, k).replace(/ \(.*\)/, ""))).join(", ") : "Bodyweight only"}</dd>
         ${p.limitations ? `<dt>Limitations</dt><dd>${esc(p.limitations)}</dd>` : ""}</dl>
-        ${rowBtn("survey", "", "Retake survey", "", "")}</div>`, p.readinessFlag ? "Your health check flagged at least one item. Keep your physician or a qualified professional in the loop as you train" : "")
+        ${rowBtn("survey", "", "Retake survey", "", "")}</div>`, p.readinessFlag ? "Your health check flagged at least one item. Keep your physician or a qualified professional in the loop as you train" : ""))
       + sec("Units and display", `<div class="group">${setRow("Weight", seg("setunit", st.unit, [["lb", "lb"], ["kg", "kg"]]))}${setRow("Distance", seg("setdist", st.dist, [["km", "km"], ["mi", "mi"]]))}${setRow("Appearance", seg("settheme", st.theme, [["auto", "Auto"], ["light", "Light"], ["dark", "Dark"]]))}${setRow("Tips on Train", seg("settips", st.tips ? "on" : "off", [["on", "On"], ["off", "Off"]]))}</div>`,
         "Changing units relabels your log. It does not convert numbers you already entered")
-      + sec("Rest timer", `<div class="group"><div class="row">${seg("setrest", st.restSec, [[0, "Off"], [60, "1:00"], [90, "1:30"], [120, "2:00"], [180, "3:00"], [240, "4:00"]])}</div></div>`, "Starts when you log a set")
-      + sec("Coaching", `<div class="group">${setRow("Target RIR", seg("setrir", st.targetRir ?? 1, [[0, "0"], [1, "1"], [2, "2"], [3, "3"]]))}${setRow("Learn from my history", seg("setadapt", st.adaptive !== false ? "on" : "off", [["on", "On"], ["off", "Off"]]))}</div>`,
+      + sec("Rest timer", `<div class="group"><div class="row">${seg("setrest", st.restSec, personal ? [[0, "Off"], [180, "3:00"], [240, "4:00"], [300, "5:00"]] : [[0, "Off"], [60, "1:00"], [90, "1:30"], [120, "2:00"], [180, "3:00"], [240, "4:00"]])}</div></div>`, "Starts when you log a set")
+      + sec("Coaching", `<div class="group">${setRow("Target RIR", seg("setrir", st.targetRir ?? 1, [[0, "0"], [1, "1"], [2, "2"], [3, "3"]]))}${setRow("Next-set advice", seg("setadvice", st.advice !== false ? "on" : "off", [["on", "On"], ["off", "Off"]]))}${setRow("Learn from my history", seg("setadapt", st.adaptive !== false ? "on" : "off", [["on", "On"], ["off", "Off"]]))}</div>`,
         "Next-set advice compares your RIR with the target. Learning from history switches between microloads and extra reps when one keeps missing on an exercise, after 3 attempts")
       + sec("Routines", `<div class="group">${S.templates.map((t) => `<div class="row"><span class="body"><span class="t">${esc(t.name)}</span><span class="d">${plural(t.exIds.length, "exercise")}</span></span><button class="btn sm" data-act="tstart" data-id="${esc(t.id)}">Start</button><button class="iconbtn" data-act="tdel" data-id="${esc(t.id)}" aria-label="Delete routine ${esc(t.name)}">${ic("trash")}</button></div>`).join("")}
         <button class="row accent" data-act="rebuild">Rebuild starter routines</button></div>`)
-      + sec("Exercise library", `<div class="group"><div class="row"><span class="body"><span class="t">${RL.EXERCISES.length} built in</span><span class="d">${customN} custom, ${hiddenN} hidden</span></span></div><button class="row accent" data-act="newex">New exercise</button>${hiddenN ? `<button class="row accent" data-act="unhide">Show hidden exercises</button>` : ""}</div>`)
+      + sec("Exercise library", `<div class="group">${setRow("Built-in exercises", seg("setbuiltins", st.builtins !== false ? "on" : "off", [["on", "On"], ["off", "Off"]]))}<div class="row"><span class="body"><span class="t">${st.builtins !== false ? RL.EXERCISES.length + " built in" : "Built-in library off"}</span><span class="d">${customN} custom, ${hiddenN} hidden</span></span></div><button class="row accent" data-act="newex">New exercise</button>${hiddenN ? `<button class="row accent" data-act="unhide">Show hidden exercises</button>` : ""}</div>`)
       + sec("Your data", `<div class="group"><div class="row"><span class="body"><span class="t">${serverMode ? "Synced to your server" : "Stored on this device"}</span><span class="d" id="syncText">${esc(syncText)}</span></span></div>
         <button class="row accent" data-act="export">Export backup</button><button class="row accent" data-act="csv">Export sets as CSV</button>
         <label class="row accent filebtn">Import backup<input type="file" id="importFile" accept="application/json,.json" hidden></label>
         <button class="row danger" data-act="wipe">Delete all data</button></div>`, serverMode ? "" : "Clearing this browser's site data deletes your log. Export a backup regularly")
       + sec("About", `<div class="group"><div class="row"><span class="body credit">Inspired by <a href="https://www.instagram.com/trainingbyjp/" target="_blank" rel="noopener noreferrer">@trainingbyjp</a> and his approach to training: log every set against last time, judge how well you moved, and take one small step forward. Rep Ledger is independent and not affiliated with or endorsed by him.</span></div>
-        ${rowBtn("legal", "", "Disclaimer", S.consent ? "Accepted " + esc(new Date(S.consent.acceptedAt).toLocaleDateString()) : "", "")}
+        ${personal ? "" : rowBtn("legal", "", "Disclaimer", S.consent ? "Accepted " + esc(new Date(S.consent.acceptedAt).toLocaleDateString()) : "", "")}
         <div class="row"><span class="body"><span class="t">Version</span></span><span class="end">${VERSION}</span></div></div>`, "Free and open source under the MIT License")
       + `</div>`;
   }
@@ -1040,12 +1052,14 @@
       case "setrest": S.settings.restSec = +b.dataset.v; queue(); render(); break;
       case "setrir": S.settings.targetRir = +b.dataset.v; queue(); render(); break;
       case "setadapt": S.settings.adaptive = b.dataset.v === "on"; queue(); render(); break;
+      case "setadvice": S.settings.advice = b.dataset.v === "on"; queue(); render(); break;
+      case "setbuiltins": S.settings.builtins = b.dataset.v === "on"; refreshLib(); queue(); render(); break;
       case "tadj": timerEnd += +b.dataset.v * 1000; drawTimer(); break;
       case "tskip": stopTimer(); break;
       case "export": download("rep-ledger-backup-" + today() + ".json", JSON.stringify(S, null, 2), "application/json"); break;
       case "csv": download("rep-ledger-sets-" + today() + ".csv", RL.toCSV(S, exById, ctx()), "text/csv"); break;
       case "wipe": confirmBox("Delete all data?", "Every session, routine, custom exercise and survey answer will be deleted" + (serverMode ? " from this browser and the server" : "") + ". Export a backup first if you might want it back.", "wipe-yes", "Delete everything"); break;
-      case "wipe-yes": S = RL.emptyState(); refreshLib(); stopTimer(); closeModal(); draft = null; view = "train"; queue(); render(); break;
+      case "wipe-yes": S = RL.emptyState(); applyPersonal(); refreshLib(); stopTimer(); closeModal(); draft = null; view = "train"; queue(); render(); break;
       case "import-yes": {
         const keep = { consent: S.consent, profile: S.profile };
         S = pendingImport; pendingImport = null;
