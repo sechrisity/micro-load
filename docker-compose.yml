@@ -1,0 +1,24 @@
+services:
+  rep-ledger:
+    build: .
+    image: rep-ledger:local
+    container_name: rep-ledger
+    restart: unless-stopped
+    ports:
+      # Localhost only. Put a reverse proxy or a tailnet in front to reach it from your phone.
+      - "127.0.0.1:8766:8766"
+    environment:
+      REPLEDGER_PASSWORD: ${REPLEDGER_PASSWORD:-}
+      REPLEDGER_USER: ${REPLEDGER_USER:-repledger}
+    volumes:
+      - rep-ledger-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  rep-ledger-data:

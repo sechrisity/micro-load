@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rep Ledger</title>
+<meta name="description" content="Self-hosted workout logbook: sets, reps, quality and a goal for next session.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rep Ledger">
+<meta name="theme-color" content="#15181C">
+<link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
+<link rel="icon" href="icon-180.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="stripe" aria-hidden="true"></div>
+<header class="top"><div class="wrap topbar">
+  <div class="brand">Rep Ledger<small>SETS · REPS · QUALITY · NEXT GOAL</small></div>
+  <div class="meta" id="meta" hidden><span class="sync" id="sync" role="status">Loading</span></div>
+  <nav class="tabs" role="tablist" id="tabs" hidden>
+    <button role="tab" data-act="tab" data-v="train" aria-selected="true">Train</button>
+    <button role="tab" data-act="tab" data-v="history" aria-selected="false">History</button>
+    <button role="tab" data-act="tab" data-v="exercises" aria-selected="false">Exercises</button>
+    <button role="tab" data-act="tab" data-v="settings" aria-selected="false">Settings</button>
+  </nav>
+</div></header>
+
+<main class="wrap" id="main">
+  <section id="v-onboard" class="onboard" hidden></section>
+  <section id="v-train" hidden>
+    <div class="train">
+      <aside class="rack">
+        <h2>Exercise rack</h2>
+        <p class="hint">Drag an exercise into the session, or tap +. Drag the handle on a card to reorder.</p>
+        <input type="search" id="libSearch" placeholder="Filter exercises" aria-label="Filter exercises">
+        <div class="rackf" id="rackf" role="group" aria-label="Filter the rack"></div>
+        <ul class="lib" id="lib"></ul>
+      </aside>
+      <div>
+        <div id="tips"></div>
+        <div class="sess-head" id="sessHead"></div>
+        <ol class="slots" id="slots"></ol>
+      </div>
+    </div>
+  </section>
+  <section id="v-history" hidden></section>
+  <section id="v-exercises" hidden></section>
+  <section id="v-settings" hidden></section>
+</main>
+<footer class="wrap foot" id="foot" hidden>Rep Ledger is a logbook, not medical advice. You train at your own risk. <a href="#" data-act="legal">Read the disclaimer</a>.</footer>
+<div id="timer"></div>
+<div id="modal"></div>
+<datalist id="labels"></datalist>
+<datalist id="groups"></datalist>
+
+<noscript><p class="wrap">Rep Ledger needs JavaScript.</p></noscript>
+<script src="Sortable.min.js"></script>
+<script src="js/exercises.js"></script>
+<script src="js/logic.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
