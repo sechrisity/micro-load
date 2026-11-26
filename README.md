@@ -27,9 +27,9 @@ Micro Load runs as a single small container or as plain static files. It install
 
 No app store and no account. Micro Load runs in your phone's web browser and installs to your home screen like any other app.
 
-### 1. Get a link
+### 1. Open the link
 
-Micro Load has to be hosted somewhere before you can open it. Ask the person who shared it with you for the link, or host your own copy (see [Quick start](#quick-start)). There is no app store version.
+Open **<https://sechrisity.github.io/micro-load/>** on your phone. That is the whole app. Someone may also have given you a link to their own copy. There is no app store version.
 
 ### 2. Add it to your home screen
 
@@ -140,7 +140,7 @@ Everything else (units, rest timer, theme, tips, routines, equipment) is set in 
 | Docker on a home server | `docker compose up -d --build` | Listens on `127.0.0.1:8766` only. Recommended |
 | Private network | `tailscale serve --bg --https=8443 http://127.0.0.1:8766` | Reachable only from your tailnet, with HTTPS |
 | Reverse proxy | Caddy, nginx or Traefik in front of port 8766 | Use HTTPS and set `MICROLOAD_PASSWORD` |
-| Static only | Serve the `static/` folder from any web server or GitHub Pages | No server sync. Data stays in that browser's storage, so export backups regularly |
+| Static only | Serve the `static/` folder from any web server or GitHub Pages | No server sync. Data stays in that browser's storage, so export backups regularly. This repo publishes itself this way through `.github/workflows/pages.yml` |
 
 The app detects which mode it is in. If `api/state` answers, it syncs to the server. Otherwise it stores everything in the browser.
 
@@ -165,7 +165,8 @@ Backups from earlier single-user versions can be imported. Their exercises come 
 - Compose binds to `127.0.0.1`. Expose it through HTTPS (reverse proxy or tailnet), never as plain HTTP on the internet.
 - The server sends a strict Content Security Policy (`script-src 'self'`, no inline scripts), `nosniff`, `frame-ancestors 'none'` and `no-referrer`.
 - The container runs as a non-root user with a read-only root filesystem, all capabilities dropped and `no-new-privileges`.
-- The app makes no third-party requests: no analytics, fonts or CDNs.
+- The app makes no third-party requests: no analytics, fonts or CDNs. On the hosted link, GitHub serves the files and may log visits under its own privacy statement; the app itself sends nothing anywhere.
+- Static hosting cannot send security headers, so `index.html` carries the same Content Security Policy as a meta tag.
 - Survey answers, including the health check and any limitations you note, are stored with your log. Treat backups as personal health data.
 
 Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
